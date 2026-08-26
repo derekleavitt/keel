@@ -1,0 +1,12 @@
+@import "@keel/ui/styles.css";
+@source "../../../packages/ui/src";
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+}
