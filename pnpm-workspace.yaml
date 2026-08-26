@@ -1,0 +1,33 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# Postinstall scripts are opt-in. Add a package here only after checking why it
+# needs to run code at install time.
+allowBuilds:
+  "@biomejs/biome": true
+  "@tailwindcss/oxide": true
+  esbuild: true
+  sharp: true
+  unrs-resolver: true
+
+
+minimumReleaseAgeExclude:
+  - '@next/env@16.3.3'
+  - '@next/swc-darwin-arm64@16.3.3'
+  - '@next/swc-darwin-x64@16.3.3'
+  - '@next/swc-linux-arm64-gnu@16.3.3'
+  - '@next/swc-linux-arm64-musl@16.3.3'
+  - '@next/swc-linux-x64-gnu@16.3.3'
+  - '@next/swc-linux-x64-musl@16.3.3'
+  - '@next/swc-win32-arm64-msvc@16.3.3'
+  - '@next/swc-win32-x64-msvc@16.3.3'
+  - '@turbo/darwin-64@2.10.12'
+  - '@turbo/darwin-arm64@2.10.12'
+  - '@turbo/linux-64@2.10.12'
+  - '@turbo/linux-arm64@2.10.12'
+  - '@turbo/windows-64@2.10.12'
+  - '@turbo/windows-arm64@2.10.12'
+  - next@16.3.3
+  - turbo@2.10.12
+

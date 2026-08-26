@@ -1,0 +1,25 @@
+{
+  "name": "@keel/auth",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts",
+    "./next": "./src/next.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test:unit": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@keel/contracts": "workspace:*",
+    "@keel/db": "workspace:*",
+    "better-auth": "1.7.1"
+  },
+  "devDependencies": {
+    "@types/node": "26.3.0",
+    "typescript": "7.0.2",
+    "vitest": "4.1.11"
+  }
+}
