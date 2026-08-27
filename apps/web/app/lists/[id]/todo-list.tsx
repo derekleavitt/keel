@@ -21,10 +21,13 @@ export function TodoList({
   listId,
   rows,
   allTags,
+  filtered = false,
 }: {
   listId: string;
   rows: Row[];
   allTags: TagChip[];
+  /** True when a filter is narrowing. Changes what an empty result means. */
+  filtered?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -93,7 +96,13 @@ export function TodoList({
       )}
 
       {ordered.length === 0 ? (
-        <p className="text-sm text-muted">Nothing here yet.</p>
+        /*
+         * "Nothing here" and "nothing matches" are different states, and the PRD calls
+         * this out specifically: users read an empty filtered list as a broken app.
+         */
+        <p className="text-sm text-muted">
+          {filtered ? 'No todos match these filters.' : 'Nothing here yet.'}
+        </p>
       ) : (
         <>
           <ul className="flex flex-col gap-px overflow-hidden rounded-lg border border-line bg-line">
