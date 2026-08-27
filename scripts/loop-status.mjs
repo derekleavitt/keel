@@ -74,6 +74,7 @@ const tasks = readDir(path.join(orch, 'tasks'))
       status: fm.status ?? 'open',
       phase: fm.phase ?? '?',
       territory: fm.territory ?? '-',
+      kind: fm.kind ?? 'keel',
       dependsOn: Array.isArray(fm.depends_on) ? fm.depends_on : [],
       acceptance: {
         checked: boxes.filter((b) => /\[[xX]\]/.test(b)).length,
@@ -93,17 +94,29 @@ const locks = readDir(path.join(orch, 'locks'))
   });
 
 const blocked = readDir(path.join(orch, 'blocked')).filter((f) => f.endsWith('.md'));
-const unblocked = tasks.filter((t) => t.status === 'open' && t.dependsOn.every((d) => done.has(d)));
 const inFlight = tasks.filter((t) => t.status === 'claimed');
+
+// Two backlogs with different roles. Testbed features DRIVE the loop; Keel tasks are
+// pulled only when building a feature demands them. Predictions are never "next".
+const features = tasks.filter((t) => t.kind === 'feature');
+const keelTasks = tasks.filter((t) => t.kind !== 'feature');
+const predicted = keelTasks.filter((t) => t.status === 'predicted');
+const openKeel = keelTasks.filter(
+  (t) => t.status === 'open' && t.dependsOn.every((d) => done.has(d)),
+);
+const openFeatures = features.filter(
+  (t) => t.status === 'open' && t.dependsOn.every((d) => done.has(d)),
+);
+// A pulled Keel task blocks the feature that demanded it, so it goes first.
+const unblocked = [...openKeel, ...openFeatures];
 
 const dirty = git('status --porcelain');
 const branch = git('rev-parse --abbrev-ref HEAD', 'unknown');
 const lastCommit = git('log -1 --format=%h|%s|%cr').split('|');
 const unpushed = git('log --oneline @{u}..HEAD').split('\n').filter(Boolean).length;
 
-const phases = [...new Set(tasks.map((t) => t.phase))].sort();
-const phaseRows = phases.map((phase) => {
-  const inPhase = tasks.filter((t) => t.phase === phase);
+const phaseRows = [...new Set(keelTasks.map((t) => t.phase))].sort().map((phase) => {
+  const inPhase = keelTasks.filter((t) => t.phase === phase);
   return {
     phase,
     done: inPhase.filter((t) => t.status === 'done').length,
@@ -153,13 +166,26 @@ fs.writeFileSync(
 
 _Derived from repository state at ${stamp} UTC. Regenerate with \`pnpm loop:status\`._
 
-## Phases
+## Testbed features — these drive the loop
 
-| Phase | Done | Total |
+${features
+  .map(
+    (f) =>
+      `- ${f.status === 'done' ? '[x]' : '[ ]'} **${f.id}** ${f.title}${f.status === 'claimed' ? ' _(in flight)_' : ''}`,
+  )
+  .join('\n')}
+
+**${features.filter((f) => f.status === 'done').length}/${features.length} features shipped.**
+
+## Keel work
+
+Pulled only when a feature demands it. Predictions are hypotheses, not a queue.
+
+| Phase | Built | Predicted |
 |---|---|---|
-${phaseRows.map((r) => `| ${r.phase} | ${r.done} | ${r.total} |`).join('\n')}
+${phaseRows.map((r) => `| ${r.phase} | ${r.done} | ${r.total - r.done} |`).join('\n')}
 
-**Overall:** ${done.size}/${tasks.length} tasks complete.
+${openKeel.length ? `**Pulled and open:** ${openKeel.map((t) => t.id).join(', ')}` : '_No Keel work pulled — nothing has demanded it yet._'}
 
 ## Right now
 
@@ -260,6 +286,17 @@ ${recovery.map((r, i) => `${i + 1}. ${r}`).join('\n\n')}`
 ## 3. Do this next
 
 ${nextBlock}
+
+## 3b. How this loop works
+
+**The testbed drives. Keel follows.**
+
+You are building a todo application in \`testbed/\`. Where Keel makes that hard, the
+friction becomes a Keel task — and only then. The 21 \`predicted\` tasks in
+\`.orchestration/tasks/P*.md\` are hypotheses about what Keel will need. **Do not build
+one because it is next.** Pull it when a feature actually demands it.
+
+If a prediction is never demanded, delete it. That is a finding, not a failure.
 
 ## 4. Before you stop
 

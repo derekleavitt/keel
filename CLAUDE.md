@@ -60,6 +60,9 @@ them have shipped wrong code.
 | `docs/decomposition-log.md` | If present: the architectural decisions behind the current backlog — ordering strategy, auth enforcement, cascade directions. Read it before designing anything. |
 | `.orchestration/territories.yaml` | If present: who owns what, and which files are serialized. |
 | `.orchestration/RESUME.md` | If present: where the last session stopped and what to do next. **Read this first when starting cold.** Regenerate with `pnpm loop:status`. |
+| `.orchestration/loop-protocol.md` | How one build iteration works, and why the testbed drives Keel rather than the other way round. |
+| `testbed/README.md` | The todo app Keel is developed against. Friction building it is what generates Keel's backlog. |
+| `examples/notes` | The reference vertical slice. **Copy this shape** for any feature package. |
 
 ## House idioms
 
@@ -96,6 +99,14 @@ pnpm lint:fix        # format and autofix
 
 ## Status
 
-Phase 0 of 6. The graph layer, doc-staleness gate, territories, task ledger and
-autonomous build loop are designed but not yet built — see `docs/architecture.md`.
-Do not assume those mechanisms exist yet.
+Keel is developed **demand-driven**: a todo application in `testbed/` is built on it, and
+friction encountered building that app is what generates Keel's backlog. Nothing is built
+because a design document predicted it.
+
+`.orchestration/tasks/` holds two backlogs. `T-*` are testbed features and they drive.
+`P-*` are predictions about what Keel will need — they are pulled to `open` only when a
+feature actually demands them, and deleted if they never are.
+
+The graph layer, doc-staleness gate and territory enforcement are designed but not built.
+Do not assume they exist. Circuit breakers, the lesson ledger, the verify gate, PGlite
+testing and crash-safe resume are built and working.

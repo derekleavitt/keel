@@ -1,27 +1,43 @@
 # Loop status
 
-_Derived from repository state at 2026-08-27 03:15 UTC. Regenerate with `pnpm loop:status`._
+_Derived from repository state at 2026-08-27 17:13 UTC. Regenerate with `pnpm loop:status`._
 
-## Phases
+## Testbed features — these drive the loop
 
-| Phase | Done | Total |
+- [ ] **T-01** Sign up, sign in, sign out
+- [ ] **T-02** Lists: create, rename, delete
+- [ ] **T-03** Todos: quick add and mark done
+- [ ] **T-04** Todos: due dates and priorities
+- [ ] **T-05** Tags: create, attach, detach
+- [ ] **T-06** Filter a list by tag, priority and done state
+- [ ] **T-07** Cross-list view of everything due today or overdue
+- [ ] **T-08** Search todos by title and notes
+- [ ] **T-09** Drag to reorder, persisted
+
+**0/9 features shipped.**
+
+## Keel work
+
+Pulled only when a feature demands it. Predictions are hypotheses, not a queue.
+
+| Phase | Built | Predicted |
 |---|---|---|
 | 1 | 0 | 5 |
 | 2 | 0 | 4 |
 | 3 | 0 | 3 |
 | 4 | 0 | 5 |
 | 5 | 0 | 3 |
-| 6 | 2 | 3 |
+| 6 | 2 | 1 |
 
-**Overall:** 2/23 tasks complete.
+_No Keel work pulled — nothing has demanded it yet._
 
 ## Right now
 
 - **Stop state:** MID-TASK — read RESUME.md before continuing
 - **Branch:** `main`
-- **Working tree:** **dirty** (27 file(s))
+- **Working tree:** **dirty** (37 file(s))
 - **Last commit:** ``  _(-)_
 
 ## Next unblocked
 
-- **P1-01** Pilot code graph engines against this repo
+- **T-01** Sign up, sign in, sign out
