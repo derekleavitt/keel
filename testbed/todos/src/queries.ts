@@ -72,28 +72,24 @@ export async function listTodos(
 }
 
 /**
- * Everything due on or before a day, across every list.
+ * Outstanding todos due on or before a day, across every list.
  *
  * Ordered by date then priority — the morning question is "what is late", not "what is
- * important". Returns the list name so the caller need not join it back.
+ * important".
+ *
+ * Deliberately returns `listId` and not the list *name*. Joining `list` here would make
+ * this package read another feature's table, and the next cross-feature field would make
+ * it read a third. Composition belongs in `@keel/testbed-agenda`, which is allowed to
+ * depend on several features precisely because nothing depends on it.
  */
-export async function listAgenda(
+export async function listDueTodos(
   userId: UserId,
   onOrBefore: string,
   database: TodosDatabase = db(),
 ) {
   return database
-    .select({
-      id: todo.id,
-      title: todo.title,
-      dueDate: todo.dueDate,
-      priority: todo.priority,
-      done: todo.done,
-      listId: todo.listId,
-      listName: list.name,
-    })
+    .select()
     .from(todo)
-    .innerJoin(list, eq(list.id, todo.listId))
     .where(ownedBy(userId, eq(todo.done, false), lte(todo.dueDate, onOrBefore)))
     .orderBy(asc(todo.dueDate), desc(todo.priority));
 }

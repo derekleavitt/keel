@@ -1,0 +1,35 @@
+# Who owns what.
+#
+# Three tiers, corrected from field results — see docs/architecture.md §7 and §12. The
+# original owns/read_only model produced worse architecture in three of three trials,
+# because "read only" forced every agent to reimplement what it could not extend.
+
+shared_services:
+  # Any territory may extend these additively. A helper every feature needs belongs here,
+  # written once. Strict read-only on these is what caused three agents to write three
+  # session helpers and pull `next` into three feature packages.
+  - pkg:auth        # requireUser, currentUser — never reimplement session resolution
+  - pkg:ui          # components, tokens, useSerialMutations
+  - pkg:runtime     # the only sanctioned crossing to a framework API
+
+serialized:
+  # Everyone touches these. They need an ordering rule, not a permission bit — "may edit"
+  # granted to three territories with no merge strategy is a deferred conflict.
+  - packages/db/src/schema/index.ts    # two lines per feature: one re-export, one spread
+  - packages/contracts/src/index.ts    # one barrel line per feature
+  - apps/web/next.config.ts            # transpilePackages
+  - pnpm-lock.yaml                     # regenerate, never merge
+
+territories:
+  lists:
+    owns: [pkg:testbed-lists, "route:/lists"]
+  todos:
+    owns: [pkg:testbed-todos, "route:/lists/[id]"]
+  tags:
+    owns: [pkg:testbed-tags]
+  agenda:
+    owns: [pkg:testbed-agenda, "route:/agenda"]
+    # RESOLVED by T-07, see docs/adr/0001-cross-feature-read-models.md.
+    # A cross-feature read model depends on several features and is depended on by nothing
+    # but the app. It writes no SQL of its own and performs no writes at all.
+    reads: [pkg:testbed-lists, pkg:testbed-todos, pkg:testbed-tags]
