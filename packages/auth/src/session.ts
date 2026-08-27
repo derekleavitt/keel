@@ -1,5 +1,6 @@
 import type { SessionUser, UserId } from '@keel/contracts';
 import { headers } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { auth } from './index.ts';
 
 /**
@@ -44,4 +45,25 @@ export async function requireUser(): Promise<SessionUser> {
 /** The signed-in user's id, or throw. The common case in query helpers. */
 export async function requireUserId(): Promise<UserId> {
   return (await requireUser()).id;
+}
+
+/**
+ * The signed-in user, or send them to sign in.
+ *
+ * Use this in pages and layouts. `requireUser()` throws, which is right for a server
+ * action — an unauthenticated mutation is a bug or an attack, and should be loud. But a
+ * person opening a protected page while logged out is doing something completely
+ * ordinary, and a 500 is the wrong answer.
+ *
+ * `next` is a dependency of this package precisely so feature packages and the app never
+ * need one to reach `headers()` or `redirect()`.
+ */
+export async function requireUserOrRedirect(returnTo?: string): Promise<SessionUser> {
+  const user = await currentUser();
+  if (!user) {
+    // `typedRoutes` checks route literals, so the destination is written out rather
+    // than assembled from a parameter. Only the query string varies.
+    redirect(returnTo ? `/sign-in?next=${encodeURIComponent(returnTo)}` : '/sign-in');
+  }
+  return user;
 }

@@ -71,6 +71,10 @@ them have shipped wrong code.
 - **`noNonNullAssertion` is on**, so drizzle's `and()` returning `SQL | undefined` cannot
   be `and(...)!`. Write `and(scope, ...narrowing) ?? scope` — the fallback is the user
   scope rather than match-everything, which is safer as well as legal.
+- **`typedRoutes` is on, so a new route needs generated types.** `apps/web`'s typecheck
+  runs `next typegen` first. If route literals suddenly fail to typecheck, the types are
+  stale — regenerate them. Do not disable `typedRoutes`, and do not upgrade to TypeScript
+  7, which cannot resolve them (see `.orchestration/lessons/L-013.md`).
 - **Adding a new workspace package needs a second `pnpm install`** before typecheck can
   resolve it. The first run reports the lockfile as up to date and skips resolution.
 - **Never import from a barrel that re-exports you.** `contracts/src/index.ts` re-exports
