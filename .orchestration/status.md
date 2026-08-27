@@ -1,6 +1,6 @@
 # Loop status
 
-_Derived from repository state at 2026-08-27 20:33 UTC. Regenerate with `pnpm loop:status`._
+_Derived from repository state at 2026-08-27 20:37 UTC. Regenerate with `pnpm loop:status`._
 
 ## Testbed features — these drive the loop
 
@@ -36,7 +36,7 @@ _No Keel work pulled — nothing has demanded it yet._
 
 - **Stop state:** MID-TASK — read RESUME.md before continuing
 - **Branch:** `main`
-- **Working tree:** **dirty** (20 file(s))
+- **Working tree:** **dirty** (4 file(s))
 - **Last commit:** ``  _(-)_
 
 ## In flight
@@ -45,7 +45,7 @@ _No Keel work pulled — nothing has demanded it yet._
 
 ## Locks
 
-- `T-01` held 7m
+- `T-01` held 11m
 ## Next unblocked
 
 _None — every open task is waiting on a dependency._

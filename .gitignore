@@ -29,4 +29,7 @@ pnpm-debug.log*
 
 # Local agent state — ephemeral by design (see docs/architecture.md §05)
 .orchestration/locks/
+# Per-machine loop counters. Committing these would share one machine's circuit-breaker
+# state with everyone and burn the iteration budget on a fresh clone.
+.orchestration/loop-state.json
 .claude/settings.local.json

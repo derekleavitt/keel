@@ -36,6 +36,30 @@ jobs:
     name: e2e smoke
     runs-on: ubuntu-latest
     timeout-minutes: 15
+
+    # The auth specs perform a real sign-up. Typechecking a vendor's required schema
+    # proves nothing — a missing account.issuer column shipped green through every other
+    # check in this pipeline. See .orchestration/lessons/L-010.md.
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: keel
+          POSTGRES_PASSWORD: keel
+          POSTGRES_DB: keel
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U keel -d keel"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://keel:keel@localhost:5432/keel
+      BETTER_AUTH_SECRET: ci-secret-not-used-anywhere-else-0123456789
+      BETTER_AUTH_URL: http://localhost:3000
+
     steps:
       - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
@@ -49,6 +73,9 @@ jobs:
 
       - name: Install browser
         run: pnpm exec playwright install --with-deps chromium
+
+      - name: Migrate
+        run: pnpm db:migrate
 
       - name: Smoke test
         run: pnpm exec playwright test
