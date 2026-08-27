@@ -1,6 +1,7 @@
 packages:
   - "apps/*"
   - "packages/*"
+  - "examples/*"
 
 # Postinstall scripts are opt-in. Add a package here only after checking why it
 # needs to run code at install time.

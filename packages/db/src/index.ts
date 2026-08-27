@@ -1,9 +1,9 @@
 import { serverEnv } from '@keel/contracts/env';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import { schema } from './schema.ts';
+import { schema } from './schema/index.ts';
 
-export * from './schema.ts';
+export * from './schema/index.ts';
 
 type Database = ReturnType<typeof create>;
 

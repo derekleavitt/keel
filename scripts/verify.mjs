@@ -23,6 +23,7 @@ const STEPS = [
   { id: 'lint', label: 'lint & format', cmd: 'pnpm', args: ['exec', 'biome', 'check', '.'] },
   { id: 'typecheck', label: 'typecheck', cmd: 'pnpm', args: ['exec', 'turbo', 'typecheck'] },
   { id: 'unit', label: 'unit tests', cmd: 'pnpm', args: ['exec', 'turbo', 'test:unit'] },
+  { id: 'lessons', label: 'lessons', cmd: 'node', args: ['scripts/lessons-validate.mjs'] },
   { id: 'build', label: 'build', cmd: 'pnpm', args: ['exec', 'turbo', 'build'] },
   {
     id: 'e2e',

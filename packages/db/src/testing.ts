@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { PGlite } from '@electric-sql/pglite';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
-import { schema } from './schema.ts';
+import { schema } from './schema/index.ts';
 
 /**
  * A real Postgres, in memory, for tests.
