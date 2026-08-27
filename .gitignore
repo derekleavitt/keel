@@ -32,4 +32,8 @@ pnpm-debug.log*
 # Per-machine loop counters. Committing these would share one machine's circuit-breaker
 # state with everyone and burn the iteration budget on a fresh clone.
 .orchestration/loop-state.json
+# Derived from repository state, so a committed copy is stale the moment anyone else
+# clones. Regenerate with `pnpm loop:status` — that is step one of every session.
+.orchestration/RESUME.md
+.orchestration/status.md
 .claude/settings.local.json

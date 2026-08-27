@@ -1,8 +1,18 @@
 # Loop protocol
 
-**Starting cold, with no memory of previous sessions? Read `.orchestration/RESUME.md`
-first.** It is regenerated from actual repository state and says exactly where the last
-session stopped.
+**Starting cold, with no memory of previous sessions? Run this first:**
+
+```bash
+pnpm loop:status
+```
+
+It reconstructs `.orchestration/RESUME.md` and `status.md` from actual repository state —
+task frontmatter, locks and git history — and RESUME.md then says exactly where the last
+session stopped and what to do about it.
+
+Neither file is committed. A checked-in copy is generated before the commit that would
+make it true, so it permanently describes a dirty tree that no one else has. Derived state
+is regenerated, never stored.
 
 ---
 
@@ -48,7 +58,8 @@ Lessons: `.orchestration/lessons/`.
 
 ### 1. Orient
 
-- Read `.orchestration/status.md` and the last two journal entries.
+- `pnpm loop:status`, then read `.orchestration/RESUME.md` and the last two journal
+  entries.
 - The next task is whatever `RESUME.md` names. A pulled Keel task always precedes the
   feature that demanded it.
 - If nothing is open, stop and report.
