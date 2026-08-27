@@ -1,7 +1,12 @@
 'use client';
 
 import type { TodoPriority } from '@keel/contracts/todo';
-import { createTodoAction, deleteTodoAction, setTodoDoneAction } from '@keel/testbed-todos/actions';
+import {
+  createTodoAction,
+  deleteTodoAction,
+  reorderTodoAction,
+  setTodoDoneAction,
+} from '@keel/testbed-todos/actions';
 import { Button, useSerialMutations } from '@keel/ui';
 import { useRouter } from 'next/navigation';
 import { useOptimistic, useRef, useState } from 'react';
@@ -31,6 +36,7 @@ export function TodoList({
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   /**
@@ -69,6 +75,27 @@ export function TodoList({
   // Sorting client-side mirrors the query's `order by done, position`, so an optimistic
   // tick moves the row immediately instead of waiting for the server to reorder it.
   const ordered = [...optimisticRows].sort((a, b) => Number(a.done) - Number(b.done));
+  const outstandingIds = ordered.filter((row) => !row.done).map((row) => row.id);
+
+  /**
+   * Drop `dragging` onto `targetId`.
+   *
+   * The action names the neighbour to sit *after*, never a position — a client that picks
+   * its own float can collide two rows or invent an order that does not exist. Dropping on
+   * the row directly above means "take its place", so the anchor is the row before that.
+   */
+  function drop(targetId: string) {
+    if (!dragging || dragging === targetId) return;
+
+    const from = outstandingIds.indexOf(dragging);
+    const to = outstandingIds.indexOf(targetId);
+    if (from === -1 || to === -1) return;
+
+    const afterId = to === 0 ? null : (outstandingIds[to > from ? to : to - 1] ?? null);
+    setDragging(null);
+    setError(null);
+    enqueue(() => reorderTodoAction({ id: dragging, listId, afterId }));
+  }
   const outstanding = ordered.filter((row) => !row.done).length;
 
   return (
@@ -112,7 +139,25 @@ export function TodoList({
         <>
           <ul className="flex flex-col gap-px overflow-hidden rounded-lg border border-line bg-line">
             {ordered.map((row) => (
-              <li key={row.id} className="flex items-start gap-3 bg-surface px-4 py-3">
+              <li
+                key={row.id}
+                draggable={!row.done && !pending}
+                aria-label={`Reorder ${row.title}`}
+                onDragStart={() => setDragging(row.id)}
+                onDragEnd={() => setDragging(null)}
+                onDragOver={(event) => {
+                  if (dragging && !row.done) event.preventDefault();
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  drop(row.id);
+                }}
+                className={
+                  dragging === row.id
+                    ? 'flex items-start gap-3 bg-surface-2 px-4 py-3 opacity-60'
+                    : 'flex items-start gap-3 bg-surface px-4 py-3'
+                }
+              >
                 <input
                   type="checkbox"
                   checked={row.done}

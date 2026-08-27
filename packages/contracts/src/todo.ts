@@ -105,6 +105,13 @@ export function isTodoFilterNarrowing(filter: TodoFilter): boolean {
   );
 }
 
+/** Reorder by naming the neighbour to sit after, never by sending a position. */
+export const reorderTodoSchema = z.object({
+  id: todoIdSchema,
+  listId: listIdSchema,
+  afterId: todoIdSchema.nullable(),
+});
+
 export const setTodoDoneSchema = z.object({
   id: todoIdSchema,
   done: z.boolean(),
