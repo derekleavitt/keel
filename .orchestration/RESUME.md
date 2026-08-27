@@ -3,7 +3,7 @@
 _Written for someone with **no memory of previous sessions**. Everything needed to
 continue is in this file or linked from it. Regenerate with `pnpm loop:status`._
 
-Generated 2026-08-27 03:15 UTC.
+Generated 2026-08-27 17:13 UTC.
 
 ---
 
@@ -23,45 +23,56 @@ shipped and green. Phases 1-6 are being built by a loop.
 1. There are uncommitted changes:
 
 ```
-M .claude/rules/database.md
- M .orchestration/RESUME.md
+M .orchestration/RESUME.md
  M .orchestration/loop-protocol.md
  M .orchestration/status.md
+ M .orchestration/tasks/P1-01.md
+ M .orchestration/tasks/P1-02.md
+ M .orchestration/tasks/P1-03.md
+ M .orchestration/tasks/P1-04.md
+ M .orchestration/tasks/P1-05.md
+ M .orchestration/tasks/P2-01.md
+ M .orchestration/tasks/P2-02.md
+ M .orchestration/tasks/P2-03.md
+ M .orchestration/tasks/P2-04.md
+ M .orchestration/tasks/P3-01.md
+ M .orchestration/tasks/P3-02.md
+ M .orchestration/tasks/P3-03.md
+ M .orchestration/tasks/P4-01.md
+ M .orchestration/tasks/P4-02.md
+ M .orchestration/tasks/P4-03.md
  M .orchestration/tasks/P4-04.md
- M .orchestration/tasks/P6-01.md
- M .orchestration/tasks/P6-03.md
- M package.json
- M packages/contracts/package.json
- M packages/contracts/src/index.ts
- M packages/db/drizzle.config.ts
- M packages/db/package.json
- M packages/db/src/index.ts
- D packages/db/src/schema.ts
- M packages/db/src/testing.test.ts
- M packages/db/src/testing.ts
- M pnpm-lock.yaml
- M pnpm-workspace.yaml
- M scripts/verify.mjs
-?? .orchestration/lessons/
-?? .orchestration/loop-state.json
-?? examples/
-?? packages/contracts/src/ids.ts
-?? packages/contracts/src/index.test.ts
-?? packages/db/src/schema/
+ M .orchestration/tasks/P4-05.md
+ M .orchestration/tasks/P5-01.md
+ M .orchestration/tasks/P5-02.md
+ M .orchestration/tasks/P5-03.md
+ M .orchestration/tasks/P6-02.md
+ M CLAUDE.md
 ```
 
 Run `pnpm verify`. If green, commit them. If red, decide whether to finish the work or run `git checkout -- .` and restart the task cleanly.
 
 ## 3. Do this next
 
-**P1-01 — Pilot code graph engines against this repo**
+**T-01 — Sign up, sign in, sign out**
 
 ```bash
-cat .orchestration/tasks/P1-01.md
+cat .orchestration/tasks/T-01.md
 ```
 
 Then follow `.orchestration/loop-protocol.md` from step 2 (Claim). The task's
 **Acceptance** list is the definition of done — never edit it to match what was built.
+
+## 3b. How this loop works
+
+**The testbed drives. Keel follows.**
+
+You are building a todo application in `testbed/`. Where Keel makes that hard, the
+friction becomes a Keel task — and only then. The 21 `predicted` tasks in
+`.orchestration/tasks/P*.md` are hypotheses about what Keel will need. **Do not build
+one because it is next.** Pull it when a feature actually demands it.
+
+If a prediction is never demanded, delete it. That is a finding, not a failure.
 
 ## 4. Before you stop
 
