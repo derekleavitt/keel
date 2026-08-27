@@ -41,6 +41,9 @@ importers:
       '@keel/testbed-lists':
         specifier: workspace:*
         version: link:../../testbed/lists
+      '@keel/testbed-tags':
+        specifier: workspace:*
+        version: link:../../testbed/tags
       '@keel/testbed-todos':
         specifier: workspace:*
         version: link:../../testbed/todos
@@ -237,6 +240,46 @@ importers:
       '@electric-sql/pglite':
         specifier: 0.5.8
         version: 0.5.8
+      '@types/node':
+        specifier: 26.3.0
+        version: 26.3.0
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.11
+        version: 4.1.11(@types/node@26.3.0)(vite@8.2.2(@types/node@26.3.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12))
+
+  testbed/tags:
+    dependencies:
+      '@keel/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@keel/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@keel/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@keel/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
+      drizzle-orm:
+        specifier: 0.45.2
+        version: 0.45.2(@electric-sql/pglite@0.5.8)(kysely@0.29.5)(postgres@3.4.9)
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: 0.5.8
+        version: 0.5.8
+      '@keel/testbed-lists':
+        specifier: workspace:*
+        version: link:../lists
+      '@keel/testbed-todos':
+        specifier: workspace:*
+        version: link:../todos
       '@types/node':
         specifier: 26.3.0
         version: 26.3.0
