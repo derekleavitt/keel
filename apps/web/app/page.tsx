@@ -1,4 +1,5 @@
 import { Button } from '@keel/ui';
+import Link from 'next/link';
 
 const checks = [
   { name: 'Monorepo', detail: 'pnpm workspaces + Turborepo, affected-only tasks' },
@@ -37,8 +38,12 @@ export default function Home() {
       </ul>
 
       <div className="flex gap-3">
-        <Button>Read the architecture</Button>
-        <Button variant="secondary">View on GitHub</Button>
+        <Link href="/sign-up">
+          <Button>Create an account</Button>
+        </Link>
+        <Link href="/sign-in">
+          <Button variant="secondary">Sign in</Button>
+        </Link>
       </div>
     </main>
   );
