@@ -5,6 +5,10 @@ One iteration of the build loop. Follow this exactly; do not improvise the order
 Backlog: `.orchestration/tasks/P*.md`. Journal: `.orchestration/journal/`.
 Blockers: `.orchestration/blocked/`.
 
+**Starting cold, with no memory of previous sessions? Read `.orchestration/RESUME.md`
+first.** It is regenerated from actual repository state and tells you exactly where the
+last session stopped.
+
 ---
 
 ## One iteration
@@ -57,6 +61,15 @@ and say so — do not rationalise it.
 - Write an ADR for any real decision, including rejected options.
 - Record field results in §12. Corrections belong in the doc, not just the commit.
 
+### 5b. Checkpoint the state
+
+```bash
+pnpm loop:status
+```
+
+Rewrites `RESUME.md` and `status.md` from real repository state. Run it after every step,
+not once at the end — see crash safety below.
+
 ### 6. Land
 
 - `pnpm verify` green, then commit with a message explaining *why*, not just what.
@@ -89,6 +102,50 @@ Write a full-context report to `.orchestration/blocked/<task-id>.md` and stop.
 
 A blocked report must contain: what was attempted, the exact failure, what was ruled out,
 and the specific decision needed. Enough that triage needs no transcript.
+
+---
+
+## Crash safety
+
+**This run can end without warning** — credit exhaustion, a session limit, a closed
+terminal. Assume the process can be killed at any instant, including mid-edit, and that
+the next session starts with **zero memory of this one**, possibly days later.
+
+Design every iteration so that is survivable.
+
+**State is derived, never remembered.** `pnpm loop:status` reconstructs everything from
+task frontmatter, lock directories and git history. Never hand-maintain status — a
+hand-written file is stale the moment a process dies. Never rely on cleanup code running
+at exit; it will not.
+
+**Commit in working increments.** Uncommitted work is ambiguous to the next session: it
+cannot tell a deliberate half-finished refactor from an interrupted one. A commit with a
+`wip:` prefix is unambiguous and recoverable. Squash at task completion if you like.
+
+**Push before long operations.** Unpushed commits exist on one machine only.
+
+**Never stop with the gate red.** Red plus no context is the worst possible handoff. If
+you must stop mid-task, get to green — even by reverting — then write what happened to
+`.orchestration/journal/`.
+
+**Locks expire.** A lock held over 45 minutes with no progress is presumed dead and may
+be reclaimed. `loop:status` flags stale locks explicitly. A killed process leaves its
+lock behind; that must never wedge the loop permanently.
+
+**Leave a breadcrumb before anything long.** Before a multi-minute operation, note in the
+journal what you are about to do. If the process dies during it, that line is the only
+evidence of intent.
+
+### Resuming after an interruption
+
+1. `pnpm loop:status` — rewrite the handoff docs from reality.
+2. Read `.orchestration/RESUME.md`. It says whether the stop was clean or mid-task, and
+   exactly what to do.
+3. If mid-task: run `pnpm verify`. Green means commit and continue. Red means decide
+   between finishing and reverting to the last green commit — do not build on top of a
+   red gate.
+4. Reclaim any stale locks.
+5. Continue from step 2 (Claim) of the iteration above.
 
 ---
 
