@@ -113,6 +113,18 @@ frontmatter so they load only when the relevant files are touched.
 
 [AGENTS.md](./AGENTS.md) points other coding agents at the same guidance.
 
+## How it gets built
+
+Keel is developed **demand-driven**. A todo application lives in `testbed/`, in this
+workspace and behind this gate, and it is grown deliberately — sharing, organizations,
+background jobs, a public API — until it demands the machinery Keel is designed around.
+
+Friction encountered building it is what generates Keel's backlog. Nothing is built
+because a design document predicted it would be needed.
+
+Done is [docs/platform-readiness.md](./docs/platform-readiness.md): a competent team could
+start *any* web platform on Keel and not immediately hit a wall.
+
 ## Roadmap
 
 | Phase | | Status |

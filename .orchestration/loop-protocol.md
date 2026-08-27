@@ -44,6 +44,13 @@ try to build it on Keel
         finish the feature, then next feature
 ```
 
+**Done is `docs/platform-readiness.md`, not a task count.** Keel is finished when a
+competent team could start *any* web platform on it and not immediately hit a wall. The
+testbed is grown deliberately — through sharing, organizations, background jobs, an
+external API — to force every capability on that list and, by T-11, to push the codebase
+past the size that fits in one context window. Only past that threshold do territories and
+impact analysis become testable rather than theoretical.
+
 **Keel only ever grows what the application demanded.** The 21 `predicted` tasks in
 `.orchestration/tasks/P*.md` are hypotheses. Never build one because it is next in the
 list. If a prediction is never demanded, delete it — that is a finding.
