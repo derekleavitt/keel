@@ -1,8 +1,9 @@
 import type { UserId } from '@keel/contracts/ids';
+import type { TodoFilter, TodoPriority } from '@keel/contracts/todo';
 import { db } from '@keel/db';
 import { list, type schema, todo } from '@keel/db/schema';
 import { positionBetween } from '@keel/testbed-lists';
-import { and, asc, eq, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, lte, type SQL } from 'drizzle-orm';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 
 /**
@@ -24,12 +25,49 @@ function ownedBy(userId: UserId, ...narrowing: (SQL | undefined)[]): SQL {
  * Ordering by `done` before `position` is what makes ticking something move it, without
  * touching its position.
  */
-export async function listTodos(userId: UserId, listId: string, database: TodosDatabase = db()) {
+export async function listTodos(
+  userId: UserId,
+  listId: string,
+  filter: TodoFilter = {},
+  database: TodosDatabase = db(),
+) {
+  const narrowing: (SQL | undefined)[] = [eq(todo.listId, listId)];
+  if (filter.done !== undefined) narrowing.push(eq(todo.done, filter.done));
+  if (filter.priority?.length) narrowing.push(inArray(todo.priority, filter.priority));
+  if (filter.dueOnOrBefore) narrowing.push(lte(todo.dueDate, filter.dueOnOrBefore));
+
   return database
     .select()
     .from(todo)
-    .where(ownedBy(userId, eq(todo.listId, listId)))
-    .orderBy(asc(todo.done), asc(todo.position));
+    .where(ownedBy(userId, ...narrowing))
+    .orderBy(asc(todo.done), desc(todo.priority), asc(todo.position));
+}
+
+/**
+ * Everything due on or before a day, across every list.
+ *
+ * Ordered by date then priority — the morning question is "what is late", not "what is
+ * important". Returns the list name so the caller need not join it back.
+ */
+export async function listAgenda(
+  userId: UserId,
+  onOrBefore: string,
+  database: TodosDatabase = db(),
+) {
+  return database
+    .select({
+      id: todo.id,
+      title: todo.title,
+      dueDate: todo.dueDate,
+      priority: todo.priority,
+      done: todo.done,
+      listId: todo.listId,
+      listName: list.name,
+    })
+    .from(todo)
+    .innerJoin(list, eq(list.id, todo.listId))
+    .where(ownedBy(userId, eq(todo.done, false), lte(todo.dueDate, onOrBefore)))
+    .orderBy(asc(todo.dueDate), desc(todo.priority));
 }
 
 export async function getTodo(userId: UserId, id: string, database: TodosDatabase = db()) {
@@ -50,7 +88,13 @@ export async function getTodo(userId: UserId, id: string, database: TodosDatabas
  */
 export async function createTodo(
   userId: UserId,
-  input: { listId: string; title: string; notes?: string | null },
+  input: {
+    listId: string;
+    title: string;
+    notes?: string | null;
+    dueDate?: string | null;
+    priority?: TodoPriority;
+  },
   database: TodosDatabase = db(),
 ) {
   const [owned] = await database
@@ -60,7 +104,7 @@ export async function createTodo(
     .limit(1);
   if (!owned) return null;
 
-  const existing = await listTodos(userId, input.listId, database);
+  const existing = await listTodos(userId, input.listId, {}, database);
   const last = existing.at(-1)?.position ?? null;
 
   const [row] = await database
@@ -71,6 +115,8 @@ export async function createTodo(
       listId: input.listId,
       title: input.title,
       notes: input.notes ?? null,
+      dueDate: input.dueDate ?? null,
+      priority: input.priority ?? 'none',
       position: positionBetween(last, null),
     })
     .returning();
@@ -81,7 +127,12 @@ export async function createTodo(
 export async function updateTodo(
   userId: UserId,
   id: string,
-  patch: { title?: string; notes?: string | null },
+  patch: {
+    title?: string;
+    notes?: string | null;
+    dueDate?: string | null;
+    priority?: TodoPriority;
+  },
   database: TodosDatabase = db(),
 ) {
   const [row] = await database

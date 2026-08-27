@@ -2,7 +2,15 @@ import type { UserId } from '@keel/contracts/ids';
 import { createTestDatabase, seedUser } from '@keel/db/testing';
 import { createList } from '@keel/testbed-lists';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createTodo, deleteTodo, getTodo, listTodos, setTodoDone, updateTodo } from './queries.ts';
+import {
+  createTodo,
+  deleteTodo,
+  getTodo,
+  listAgenda,
+  listTodos,
+  setTodoDone,
+  updateTodo,
+} from './queries.ts';
 
 let database: Awaited<ReturnType<typeof createTestDatabase>>;
 let owner: UserId;
@@ -23,7 +31,7 @@ afterEach(async () => {
 });
 
 const titles = async (userId: UserId, listId: string) =>
-  (await listTodos(userId, listId, database)).map((row) => row.title);
+  (await listTodos(userId, listId, {}, database)).map((row) => row.title);
 
 describe('quick add', () => {
   it('needs only a title and a list', async () => {
@@ -73,7 +81,7 @@ describe('completion', () => {
     for (const title of ['A', 'B', 'C']) {
       await createTodo(owner, { listId: ownerList, title }, database);
     }
-    const before = await listTodos(owner, ownerList, database);
+    const before = await listTodos(owner, ownerList, {}, database);
     const a = before[0];
     if (!a) throw new Error('missing A');
 
@@ -88,7 +96,7 @@ describe('completion', () => {
     for (const title of ['A', 'B']) {
       await createTodo(owner, { listId: ownerList, title }, database);
     }
-    const rows = await listTodos(owner, ownerList, database);
+    const rows = await listTodos(owner, ownerList, {}, database);
     const a = rows[0];
     if (!a) throw new Error('missing A');
 
@@ -116,5 +124,83 @@ describe('cascades', () => {
     await createTodo(owner, { listId: ownerList, title: 'Doomed' }, database);
     await database.delete(user).where(eq(user.id, owner));
     expect(await titles(owner, ownerList)).toEqual([]);
+  });
+});
+
+describe('due dates and priority', () => {
+  it('stores the due date as a SQL date, not a timestamp', async () => {
+    // A future edit could flip drizzle's `date()` mode and silently reintroduce the
+    // timezone bug the PRD calls the classic failure. Ask the database directly.
+    const { sql } = await import('drizzle-orm');
+    const result = await database.execute(sql`
+      select data_type from information_schema.columns
+      where table_name = 'todo' and column_name = 'due_date'
+    `);
+    expect((result.rows[0] as { data_type: string }).data_type).toBe('date');
+  });
+
+  it('round-trips a bare YYYY-MM-DD with no timezone shift', async () => {
+    const created = await createTodo(
+      owner,
+      { listId: ownerList, title: 'Dated', dueDate: '2026-02-28' },
+      database,
+    );
+    expect(created?.dueDate).toBe('2026-02-28');
+    expect(typeof created?.dueDate).toBe('string');
+  });
+
+  it('distinguishes clearing a due date from leaving it alone', async () => {
+    const created = await createTodo(
+      owner,
+      { listId: ownerList, title: 'D', dueDate: '2026-03-01', priority: 'high' },
+      database,
+    );
+    if (!created) throw new Error('setup failed');
+
+    await updateTodo(owner, created.id, { title: 'D2' }, database);
+    expect((await getTodo(owner, created.id, database))?.dueDate).toBe('2026-03-01');
+
+    await updateTodo(owner, created.id, { dueDate: null }, database);
+    const cleared = await getTodo(owner, created.id, database);
+    expect(cleared?.dueDate).toBeNull();
+    expect(cleared?.priority).toBe('high');
+  });
+
+  it('orders by priority descending, using the enum declaration order', async () => {
+    for (const [title, priority] of [
+      ['low one', 'low'],
+      ['urgent', 'high'],
+      ['middling', 'medium'],
+    ] as const) {
+      await createTodo(owner, { listId: ownerList, title, priority }, database);
+    }
+    expect(await titles(owner, ownerList)).toEqual(['urgent', 'middling', 'low one']);
+  });
+
+  it('filters by priority and by done state', async () => {
+    await createTodo(owner, { listId: ownerList, title: 'H', priority: 'high' }, database);
+    await createTodo(owner, { listId: ownerList, title: 'L', priority: 'low' }, database);
+
+    const high = await listTodos(owner, ownerList, { priority: ['high'] }, database);
+    expect(high.map((r) => r.title)).toEqual(['H']);
+
+    const outstanding = await listTodos(owner, ownerList, { done: false }, database);
+    expect(outstanding).toHaveLength(2);
+  });
+
+  it('builds a cross-list agenda of what is due, scoped to the user', async () => {
+    const second = await createList(owner, { name: 'Second' }, database);
+    await createTodo(owner, { listId: ownerList, title: 'Late', dueDate: '2026-01-01' }, database);
+    await createTodo(owner, { listId: second.id, title: 'Today', dueDate: '2026-06-15' }, database);
+    await createTodo(owner, { listId: ownerList, title: 'Later', dueDate: '2027-01-01' }, database);
+    await createTodo(
+      stranger,
+      { listId: strangerList, title: 'Not mine', dueDate: '2026-01-01' },
+      database,
+    );
+
+    const agenda = await listAgenda(owner, '2026-06-15', database);
+    expect(agenda.map((r) => r.title)).toEqual(['Late', 'Today']);
+    expect(agenda[1]?.listName).toBe('Second');
   });
 });

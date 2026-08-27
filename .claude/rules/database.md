@@ -11,6 +11,11 @@ paths: ["packages/db/**"]
   if it emits every table in the repo, something is wrong; stop and say so.
 - The `user`, `session`, `account` and `verification` tables are dictated by the Better
   Auth adapter. Do not rename their columns.
+- **Use `.default(value)`, not `.$defaultFn()`, for any column that is NOT NULL.**
+  `$defaultFn` is a JavaScript-side default that never reaches SQL, so the generated
+  migration adds the column with no `DEFAULT` and fails on any table that already has
+  rows. An empty test database cannot catch this — a static check over migration SQL does.
+  See `.orchestration/lessons/L-018.md`.
 - `db()` is lazy and must stay that way — importing this package must never open a
   connection, or `pnpm verify` breaks on a clean checkout.
 

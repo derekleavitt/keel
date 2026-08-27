@@ -25,7 +25,16 @@ export default async function ListPage({ params }: { params: Promise<{ id: strin
         <h1 className="text-2xl font-semibold tracking-tight">{list.name}</h1>
       </header>
 
-      <TodoList listId={list.id} rows={todos.map(({ id, title, done }) => ({ id, title, done }))} />
+      <TodoList
+        listId={list.id}
+        rows={todos.map(({ id, title, done, dueDate, priority }) => ({
+          id,
+          title,
+          done,
+          dueDate,
+          priority,
+        }))}
+      />
     </main>
   );
 }
