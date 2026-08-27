@@ -3,7 +3,9 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { PGlite } from '@electric-sql/pglite';
+import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 import { getTableConfig } from 'drizzle-orm/pg-core';
+import { drizzle as proxyDrizzle } from 'drizzle-orm/pg-proxy';
 import { drizzle } from 'drizzle-orm/pglite';
 import { migrate } from 'drizzle-orm/pglite/migrator';
 import { schema } from './schema/index.ts';
@@ -142,6 +144,33 @@ export async function seedUser(
     .returning();
   if (!row) throw new Error('seedUser failed to insert');
   return row;
+}
+
+/**
+ * A database handle that builds SQL and never connects.
+ *
+ * Some properties are better asserted against the rendered SQL than against results. User
+ * scoping is the clearest case: a behavioural test proves the scope holds for the filter
+ * combinations someone thought to write, while rendering the query proves it for *every*
+ * combination — including the ones added next week.
+ *
+ * Backed by drizzle's proxy driver, whose "connection" is a callback that is never
+ * invoked, so this costs nothing and needs no database.
+ *
+ * ```ts
+ * const { sql } = new PgDialect().sqlToQuery(
+ *   buildListQuery(userId, filter, queryBuilder()).getSQL(),
+ * );
+ * expect(sql).toContain('"user_id" =');
+ * ```
+ */
+export function queryBuilder() {
+  return proxyDrizzle(
+    async () => {
+      throw new Error('queryBuilder() builds SQL only — it cannot execute a query');
+    },
+    { schema },
+  ) as unknown as PgDatabase<PgQueryResultHKT, typeof schema>;
 }
 
 /** Skip PGlite-backed suites when a platform cannot run WASM Postgres. */

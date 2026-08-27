@@ -1,9 +1,9 @@
 import type { UserId } from '@keel/contracts/ids';
 import type { TodoFilter, TodoPriority } from '@keel/contracts/todo';
 import { db } from '@keel/db';
-import { list, type schema, todo } from '@keel/db/schema';
+import { list, type schema, todo, todoTag } from '@keel/db/schema';
 import { positionBetween } from '@keel/testbed-lists';
-import { and, asc, desc, eq, inArray, lte, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, exists, inArray, lte, type SQL } from 'drizzle-orm';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 
 /**
@@ -25,7 +25,14 @@ function ownedBy(userId: UserId, ...narrowing: (SQL | undefined)[]): SQL {
  * Ordering by `done` before `position` is what makes ticking something move it, without
  * touching its position.
  */
-export async function listTodos(
+/**
+ * The list query, exposed as a builder so its SQL can be asserted without a connection.
+ *
+ * User scoping is the security-critical property here, and `scoping.test.ts` renders this
+ * across every filter combination to prove the scope survives all of them — including
+ * combinations nobody has written a behavioural test for.
+ */
+export function buildTodoListQuery(
   userId: UserId,
   listId: string,
   filter: TodoFilter = {},
@@ -35,12 +42,33 @@ export async function listTodos(
   if (filter.done !== undefined) narrowing.push(eq(todo.done, filter.done));
   if (filter.priority?.length) narrowing.push(inArray(todo.priority, filter.priority));
   if (filter.dueOnOrBefore) narrowing.push(lte(todo.dueDate, filter.dueOnOrBefore));
+  if (filter.tagIds?.length) {
+    // EXISTS rather than a join: a todo carrying two of the selected tags must appear
+    // once, not twice. A join would duplicate the row per matching tag.
+    narrowing.push(
+      exists(
+        database
+          .select({ one: todoTag.tagId })
+          .from(todoTag)
+          .where(and(eq(todoTag.todoId, todo.id), inArray(todoTag.tagId, filter.tagIds))),
+      ),
+    );
+  }
 
   return database
     .select()
     .from(todo)
     .where(ownedBy(userId, ...narrowing))
     .orderBy(asc(todo.done), desc(todo.priority), asc(todo.position));
+}
+
+export async function listTodos(
+  userId: UserId,
+  listId: string,
+  filter: TodoFilter = {},
+  database: TodosDatabase = db(),
+) {
+  return buildTodoListQuery(userId, listId, filter, database);
 }
 
 /**

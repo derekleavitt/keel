@@ -71,7 +71,12 @@ export const updateTodoSchema = z
   })
   .refine((value) => Object.keys(value).length > 0, 'Nothing to update');
 
-/** Filters for a list view. Every field optional; absent means "do not narrow". */
+/**
+ * Filters for a list view. Every field optional; absent means "do not narrow".
+ *
+ * New filters belong **inside this object**, never as a new positional parameter on
+ * `listTodos` — see .orchestration/lessons/L-017.md for what happens when you do.
+ */
 export const todoFilterSchema = z.object({
   done: z.boolean().optional(),
   priority: z.array(todoPrioritySchema).optional(),
@@ -79,8 +84,26 @@ export const todoFilterSchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
+  tagIds: z.array(z.string().min(1)).optional(),
 });
 export type TodoFilter = z.infer<typeof todoFilterSchema>;
+
+/**
+ * Does this filter actually narrow anything?
+ *
+ * The PRD requires an empty list and a fully-filtered list to look different — users read
+ * "nothing here" as broken when they meant "nothing matches". That distinction is a
+ * property of the filter rather than of the results, so it lives beside the schema and
+ * both server and client can ask the same question.
+ */
+export function isTodoFilterNarrowing(filter: TodoFilter): boolean {
+  return (
+    filter.done !== undefined ||
+    (filter.priority?.length ?? 0) > 0 ||
+    filter.dueOnOrBefore !== undefined ||
+    (filter.tagIds?.length ?? 0) > 0
+  );
+}
 
 export const setTodoDoneSchema = z.object({
   id: todoIdSchema,
