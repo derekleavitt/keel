@@ -3,7 +3,7 @@ import type { TodoFilter } from '@keel/contracts/todo';
 import { queryBuilder } from '@keel/db/testing';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
-import { buildTodoListQuery } from './queries.ts';
+import { buildTodoListQuery, escapeLikePattern } from './queries.ts';
 
 /**
  * User scoping, asserted against the rendered SQL.
@@ -65,5 +65,31 @@ describe('user scoping survives every filter combination', () => {
     );
     expect(sql).not.toContain('1=1');
     expect(params).toContain("' or 1=1 --");
+  });
+});
+
+describe('LIKE pattern escaping', () => {
+  it('escapes the wildcards a user can type', () => {
+    expect(escapeLikePattern('50%')).toBe('50\\%');
+    expect(escapeLikePattern('a_b')).toBe('a\\_b');
+    expect(escapeLikePattern('100%_done')).toBe('100\\%\\_done');
+  });
+
+  it('escapes the backslash first, so escapes are not double-escaped', () => {
+    // Getting the order wrong turns `\` into `\\\\` and breaks every subsequent escape.
+    expect(escapeLikePattern('a\\b')).toBe('a\\\\b');
+    expect(escapeLikePattern('\\%')).toBe('\\\\\\%');
+  });
+
+  it('leaves ordinary text alone', () => {
+    expect(escapeLikePattern('buy milk')).toBe('buy milk');
+  });
+
+  it('keeps a wildcard search literal in the rendered SQL', () => {
+    // A search for "50%" must not match everything beginning with "50".
+    const { params } = dialect.sqlToQuery(
+      buildTodoListQuery(userId, 'lst_probe', {}, database).getSQL(),
+    );
+    expect(params).not.toContain('50%');
   });
 });

@@ -3,7 +3,7 @@ import type { TodoFilter, TodoPriority } from '@keel/contracts/todo';
 import { db } from '@keel/db';
 import { list, type schema, todo, todoTag } from '@keel/db/schema';
 import { positionBetween } from '@keel/testbed-lists';
-import { and, asc, desc, eq, exists, inArray, lte, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, exists, ilike, inArray, lte, or, type SQL } from 'drizzle-orm';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 
 /**
@@ -79,7 +79,7 @@ export async function listTodos(
  *
  * Deliberately returns `listId` and not the list *name*. Joining `list` here would make
  * this package read another feature's table, and the next cross-feature field would make
- * it read a third. Composition belongs in `@keel/testbed-agenda`, which is allowed to
+ * it read a third. Composition belongs in `@keel/testbed-views`, which is allowed to
  * depend on several features precisely because nothing depends on it.
  */
 export async function listDueTodos(
@@ -92,6 +92,45 @@ export async function listDueTodos(
     .from(todo)
     .where(ownedBy(userId, eq(todo.done, false), lte(todo.dueDate, onOrBefore)))
     .orderBy(asc(todo.dueDate), desc(todo.priority));
+}
+
+/**
+ * Escape a user-supplied string for use inside a LIKE pattern.
+ *
+ * `%` and `_` are wildcards in SQL. Typed by a user they are literal characters, and a
+ * search for `50%` that quietly matches everything starting with `50` is both wrong and,
+ * on a large table, a way to make the database do far more work than the user asked for.
+ *
+ * The backslash must be escaped first, or escaping the wildcards would re-escape the
+ * backslashes this function just added.
+ */
+export function escapeLikePattern(input: string): string {
+  return input.replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
+/**
+ * Search a user's todos by title and notes.
+ *
+ * An empty or whitespace-only query returns everything rather than nothing — a search box
+ * that empties the screen when cleared reads as broken.
+ *
+ * Returns todo columns only. Which list a hit belongs to is a cross-feature question and
+ * belongs to the composition layer — see docs/adr/0001-cross-feature-read-models.md.
+ */
+export async function searchTodos(userId: UserId, query: string, database: TodosDatabase = db()) {
+  const trimmed = query.trim();
+  const narrowing: (SQL | undefined)[] = [];
+
+  if (trimmed.length > 0) {
+    const pattern = `%${escapeLikePattern(trimmed)}%`;
+    narrowing.push(or(ilike(todo.title, pattern), ilike(todo.notes, pattern)));
+  }
+
+  return database
+    .select()
+    .from(todo)
+    .where(ownedBy(userId, ...narrowing))
+    .orderBy(asc(todo.done), desc(todo.priority), asc(todo.dueDate));
 }
 
 export async function getTodo(userId: UserId, id: string, database: TodosDatabase = db()) {

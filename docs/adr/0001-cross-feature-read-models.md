@@ -53,8 +53,17 @@ any ownership, because the package already depends on everything it would need.
 distributed transaction wearing a disguise. Writes stay with the feature that owns the
 table.
 
-**This generalises.** T-18 (admin), T-19 (search) and any dashboard are the same shape and
-should follow it rather than re-deriving an answer.
+**This generalises — confirmed at the second instance.** T-08 (search) followed the same
+shape without re-deriving anything. It also refined the rule: **the unit is the composition
+*layer*, not one package per view.** The package was called `agenda` when it held one view;
+search made that name wrong, so it became `testbed/views` holding both. Renamed at two
+instances, while it was still cheap. T-18 (admin) and any dashboard belong there too.
+
+**Only the crossing part composes.** Search's query lives in `todos`, because title and
+notes are todo columns and the LIKE escaping belongs with the table it protects. Just
+"which list is this in" crosses a boundary, and only that lives in the view. Moving a whole
+feature's query into the composition layer because its *result* is displayed across
+features would hollow out the feature package.
 
 **`KeelDatabase` moved to `@keel/db`.** Composition packages need the database type without
 writing SQL, and five identical `XDatabase` aliases were five reasons for packages to
