@@ -41,9 +41,7 @@ describe('serverEnv', () => {
   });
 
   it('names every missing variable in one message', () => {
-    // biome-ignore lint/performance/noDelete: removing the key is the point of the test
     delete process.env.DATABASE_URL;
-    // biome-ignore lint/performance/noDelete: removing the key is the point of the test
     delete process.env.BETTER_AUTH_SECRET;
 
     let message = '';

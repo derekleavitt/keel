@@ -3,7 +3,7 @@
 _Written for someone with **no memory of previous sessions**. Everything needed to
 continue is in this file or linked from it. Regenerate with `pnpm loop:status`._
 
-Generated 2026-08-27 17:13 UTC.
+Generated 2026-08-27 20:33 UTC.
 
 ---
 
@@ -24,33 +24,30 @@ shipped and green. Phases 1-6 are being built by a loop.
 
 ```
 M .orchestration/RESUME.md
- M .orchestration/loop-protocol.md
  M .orchestration/status.md
- M .orchestration/tasks/P1-01.md
- M .orchestration/tasks/P1-02.md
- M .orchestration/tasks/P1-03.md
- M .orchestration/tasks/P1-04.md
- M .orchestration/tasks/P1-05.md
- M .orchestration/tasks/P2-01.md
- M .orchestration/tasks/P2-02.md
- M .orchestration/tasks/P2-03.md
- M .orchestration/tasks/P2-04.md
- M .orchestration/tasks/P3-01.md
- M .orchestration/tasks/P3-02.md
- M .orchestration/tasks/P3-03.md
- M .orchestration/tasks/P4-01.md
- M .orchestration/tasks/P4-02.md
- M .orchestration/tasks/P4-03.md
- M .orchestration/tasks/P4-04.md
- M .orchestration/tasks/P4-05.md
- M .orchestration/tasks/P5-01.md
- M .orchestration/tasks/P5-02.md
- M .orchestration/tasks/P5-03.md
- M .orchestration/tasks/P6-02.md
- M CLAUDE.md
+ M .orchestration/tasks/T-01.md
+ M README.md
+ M apps/web/next.config.ts
+ M package.json
+ M packages/contracts/src/env.test.ts
+ M packages/db/drizzle.config.ts
+ M packages/db/drizzle/meta/_journal.json
+ M packages/db/src/schema/auth.ts
+ M scripts/loop-status.mjs
+?? .orchestration/journal/2026-08-27-K-001.md
+?? .orchestration/lessons/L-010.md
+?? .orchestration/lessons/L-011.md
+?? .orchestration/tasks/K-001.md
+?? apps/web/e2e/auth.spec.ts
+?? docker-compose.yml
+?? packages/db/drizzle/0001_account_issuer.sql
+?? packages/db/drizzle/meta/0001_snapshot.json
+?? scripts/db-up.mjs
 ```
 
 Run `pnpm verify`. If green, commit them. If red, decide whether to finish the work or run `git checkout -- .` and restart the task cleanly.
+
+2. **T-01** is marked `claimed` with acceptance 0/4 met. Open `.orchestration/tasks/T-01.md` and work through the unchecked items.
 
 ## 3. Do this next
 
@@ -86,6 +83,7 @@ times**:
 
 ## 5. Progress
 
+- Phase 0: 1/1
 - Phase 1: 0/5
 - Phase 2: 0/4
 - Phase 3: 0/3

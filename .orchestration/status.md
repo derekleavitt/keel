@@ -1,10 +1,10 @@
 # Loop status
 
-_Derived from repository state at 2026-08-27 17:13 UTC. Regenerate with `pnpm loop:status`._
+_Derived from repository state at 2026-08-27 20:33 UTC. Regenerate with `pnpm loop:status`._
 
 ## Testbed features — these drive the loop
 
-- [ ] **T-01** Sign up, sign in, sign out
+- [ ] **T-01** Sign up, sign in, sign out _(in flight)_
 - [ ] **T-02** Lists: create, rename, delete
 - [ ] **T-03** Todos: quick add and mark done
 - [ ] **T-04** Todos: due dates and priorities
@@ -22,6 +22,7 @@ Pulled only when a feature demands it. Predictions are hypotheses, not a queue.
 
 | Phase | Built | Predicted |
 |---|---|---|
+| 0 | 1 | 0 |
 | 1 | 0 | 5 |
 | 2 | 0 | 4 |
 | 3 | 0 | 3 |
@@ -35,9 +36,16 @@ _No Keel work pulled — nothing has demanded it yet._
 
 - **Stop state:** MID-TASK — read RESUME.md before continuing
 - **Branch:** `main`
-- **Working tree:** **dirty** (37 file(s))
+- **Working tree:** **dirty** (20 file(s))
 - **Last commit:** ``  _(-)_
 
+## In flight
+
+- **T-01** Sign up, sign in, sign out — acceptance 0/4
+
+## Locks
+
+- `T-01` held 7m
 ## Next unblocked
 
-- **T-01** Sign up, sign in, sign out
+_None — every open task is waiting on a dependency._
