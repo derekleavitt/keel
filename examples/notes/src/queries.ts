@@ -62,6 +62,29 @@ export async function getNote(userId: UserId, id: string, database: NotesDatabas
   return row ?? null;
 }
 
+/**
+ * OWNERSHIP OF A REFERENCED ID IS NOT FREE.
+ *
+ * A note belongs only to its user, so `createNote` has nothing else to check. The moment a
+ * row references a second table — a todo pointing at a list, a join row pointing at both a
+ * tag and a todo — **the foreign key proves the row exists, not that it is yours.**
+ *
+ * Without an explicit check a user can attach their data to someone else's record by
+ * guessing an id, and every subsequent read looks perfectly well-scoped.
+ *
+ * This repo has made that mistake twice, independently, in `createTodo` and in
+ * `attachTag`. Both now verify the referenced row belongs to the caller before writing,
+ * and both have a test for it. Copy that habit, not just this file's shape:
+ *
+ * ```ts
+ * const [owned] = await database
+ *   .select({ id: other.id })
+ *   .from(other)
+ *   .where(and(eq(other.id, input.otherId), eq(other.userId, userId)))
+ *   .limit(1);
+ * if (!owned) return null;
+ * ```
+ */
 export async function createNote(
   userId: UserId,
   input: { title: string; body?: string | null },

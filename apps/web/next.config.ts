@@ -29,6 +29,7 @@ const config: NextConfig = {
     '@keel/contracts',
     '@keel/runtime',
     '@keel/testbed-lists',
+    '@keel/testbed-tags',
     '@keel/testbed-todos',
   ],
   typedRoutes: true,

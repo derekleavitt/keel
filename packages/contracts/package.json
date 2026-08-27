@@ -8,6 +8,7 @@
     "./env": "./src/env.ts",
     "./ids": "./src/ids.ts",
     "./list": "./src/list.ts",
+    "./tag": "./src/tag.ts",
     "./todo": "./src/todo.ts"
   },
   "scripts": {
