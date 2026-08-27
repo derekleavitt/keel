@@ -23,6 +23,13 @@ Three parallel branches each generating a correct delta still collide on
 `meta/_journal.json` and on identically-numbered snapshots. A branch containing new files
 under `drizzle/` will be rejected. See `.orchestration/lessons/L-005.md`.
 
+**Your tables are still testable before that migration exists.** `createTestDatabase()`
+derives the pending delta from `schema` and applies it, so a branch tests its new tables
+against real Postgres with real foreign keys and real cascades. You do not need to commit
+a migration, and you must not hand-write `CREATE TABLE` in a test to work around it — that
+asserts against DDL the test invented rather than against the schema. See
+`.orchestration/lessons/L-017.md`.
+
 ## Where feature tables go
 
 **One file per area, under `packages/db/src/schema/`.**
