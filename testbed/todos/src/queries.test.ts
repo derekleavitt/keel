@@ -1,0 +1,120 @@
+import type { UserId } from '@keel/contracts/ids';
+import { createTestDatabase, seedUser } from '@keel/db/testing';
+import { createList } from '@keel/testbed-lists';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createTodo, deleteTodo, getTodo, listTodos, setTodoDone, updateTodo } from './queries.ts';
+
+let database: Awaited<ReturnType<typeof createTestDatabase>>;
+let owner: UserId;
+let stranger: UserId;
+let ownerList: string;
+let strangerList: string;
+
+beforeEach(async () => {
+  database = await createTestDatabase();
+  owner = (await seedUser(database, { id: 'owner' })).id as UserId;
+  stranger = (await seedUser(database, { id: 'stranger' })).id as UserId;
+  ownerList = (await createList(owner, { name: 'Mine' }, database)).id;
+  strangerList = (await createList(stranger, { name: 'Theirs' }, database)).id;
+});
+
+afterEach(async () => {
+  await database.close();
+});
+
+const titles = async (userId: UserId, listId: string) =>
+  (await listTodos(userId, listId, database)).map((row) => row.title);
+
+describe('quick add', () => {
+  it('needs only a title and a list', async () => {
+    const row = await createTodo(owner, { listId: ownerList, title: 'Milk' }, database);
+    expect(row?.title).toBe('Milk');
+    expect(row?.done).toBe(false);
+  });
+
+  it('appends in creation order', async () => {
+    for (const title of ['A', 'B', 'C']) {
+      await createTodo(owner, { listId: ownerList, title }, database);
+    }
+    expect(await titles(owner, ownerList)).toEqual(['A', 'B', 'C']);
+  });
+});
+
+describe('ownership', () => {
+  it('refuses to file a todo into a list the caller does not own', async () => {
+    // The foreign key only proves the list exists — not that it is yours.
+    const row = await createTodo(owner, { listId: strangerList, title: 'Intrusion' }, database);
+    expect(row).toBeNull();
+    expect(await titles(stranger, strangerList)).toEqual([]);
+  });
+
+  it('refuses to read, update, tick or delete another user’s todo', async () => {
+    const created = await createTodo(owner, { listId: ownerList, title: 'Private' }, database);
+    if (!created) throw new Error('setup failed');
+
+    expect(await getTodo(stranger, created.id, database)).toBeNull();
+    expect(await updateTodo(stranger, created.id, { title: 'Hacked' }, database)).toBeNull();
+    expect(await setTodoDone(stranger, created.id, true, database)).toBeNull();
+    expect(await deleteTodo(stranger, created.id, database)).toBe(false);
+
+    const still = await getTodo(owner, created.id, database);
+    expect(still?.title).toBe('Private');
+    expect(still?.done).toBe(false);
+  });
+
+  it('does not leak todos across lists', async () => {
+    await createTodo(owner, { listId: ownerList, title: 'Mine' }, database);
+    expect(await titles(stranger, strangerList)).toEqual([]);
+  });
+});
+
+describe('completion', () => {
+  it('sinks completed todos to the bottom without moving their position', async () => {
+    for (const title of ['A', 'B', 'C']) {
+      await createTodo(owner, { listId: ownerList, title }, database);
+    }
+    const before = await listTodos(owner, ownerList, database);
+    const a = before[0];
+    if (!a) throw new Error('missing A');
+
+    await setTodoDone(owner, a.id, true, database);
+    expect(await titles(owner, ownerList)).toEqual(['B', 'C', 'A']);
+
+    const after = await getTodo(owner, a.id, database);
+    expect(after?.position).toBe(a.position);
+  });
+
+  it('un-ticking restores the original order', async () => {
+    for (const title of ['A', 'B']) {
+      await createTodo(owner, { listId: ownerList, title }, database);
+    }
+    const rows = await listTodos(owner, ownerList, database);
+    const a = rows[0];
+    if (!a) throw new Error('missing A');
+
+    await setTodoDone(owner, a.id, true, database);
+    expect(await titles(owner, ownerList)).toEqual(['B', 'A']);
+    await setTodoDone(owner, a.id, false, database);
+    expect(await titles(owner, ownerList)).toEqual(['A', 'B']);
+  });
+});
+
+describe('cascades', () => {
+  it('deleting a list removes its todos', async () => {
+    const { list } = await import('@keel/db/schema');
+    const { eq } = await import('drizzle-orm');
+
+    await createTodo(owner, { listId: ownerList, title: 'Doomed' }, database);
+    await database.delete(list).where(eq(list.id, ownerList));
+    expect(await titles(owner, ownerList)).toEqual([]);
+  });
+
+  it('deleting a user removes their todos', async () => {
+    const { user } = await import('@keel/db/schema');
+    const { eq } = await import('drizzle-orm');
+
+    await createTodo(owner, { listId: ownerList, title: 'Doomed' }, database);
+    await database.delete(user).where(eq(user.id, owner));
+    expect(await titles(owner, ownerList)).toEqual([]);
+  });
+});
