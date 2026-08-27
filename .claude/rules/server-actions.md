@@ -23,3 +23,18 @@ silently — there is no lint rule and no type error.
 The UI hiding a button is not a security control. Every query helper takes the branded
 `UserId` from `@keel/contracts` as its first argument, so an unscoped query is a compile
 error rather than a data leak. Preserve that property.
+
+## Express the rule once, and compose it
+
+`eq(table.userId, userId)` works exactly until two people touch one thing. Once anything is
+shared, "can I see this" stops being a property of the row and becomes a question about a
+grant — and a rule re-derived inline in each query is how one of them ends up quietly more
+permissive than the rest.
+
+`@keel/testbed-lists/access` is the reference: `visibleVia()` and `editableVia()` return
+predicates every package composes, and they are **subqueries**, not fetched id lists. The
+database re-evaluates them per statement, so revoking a grant takes effect on the next
+query with no cache to invalidate and no window where a stale id list is still trusted.
+
+Note what this means for row ownership: on a shared list, `todo.userId` records who
+*created* a todo and no longer decides who may see it.

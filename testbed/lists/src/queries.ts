@@ -1,8 +1,9 @@
 import type { UserId } from '@keel/contracts/ids';
-import { db } from '@keel/db';
-import { list, type schema } from '@keel/db/schema';
+import { db, type KeelDatabase } from '@keel/db';
+import { list } from '@keel/db/schema';
 import { and, asc, eq, type SQL } from 'drizzle-orm';
-import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
+
+import { ownedByUser, visibleVia } from './access.ts';
 import {
   evenPositions,
   neighboursForMove,
@@ -15,22 +16,26 @@ import {
  * database handle is a trailing parameter with a `db()` default, and why `userId` is the
  * branded type rather than a string.
  */
-export type ListsDatabase = PgDatabase<PgQueryResultHKT, typeof schema>;
+export type ListsDatabase = KeelDatabase;
 
-function ownedBy(userId: UserId, ...narrowing: (SQL | undefined)[]): SQL {
-  const owner = eq(list.userId, userId);
-  return and(owner, ...narrowing) ?? owner;
+/**
+ * Reads use visibility (owned or shared); writes use ownership or an editor grant.
+ * Both come from `./access.ts` so the rule exists in exactly one place.
+ */
+function visible(userId: UserId, ...narrowing: (SQL | undefined)[]): SQL {
+  const scope = visibleVia(list.id, userId);
+  return and(scope, ...narrowing) ?? scope;
 }
 
 export async function listLists(userId: UserId, database: ListsDatabase = db()) {
-  return database.select().from(list).where(ownedBy(userId)).orderBy(asc(list.position));
+  return database.select().from(list).where(visible(userId)).orderBy(asc(list.position));
 }
 
 export async function getList(userId: UserId, id: string, database: ListsDatabase = db()) {
   const [row] = await database
     .select()
     .from(list)
-    .where(ownedBy(userId, eq(list.id, id)))
+    .where(visible(userId, eq(list.id, id)))
     .limit(1);
   return row ?? null;
 }
@@ -66,7 +71,8 @@ export async function updateList(
   const [row] = await database
     .update(list)
     .set({ ...patch, updatedAt: new Date() })
-    .where(ownedBy(userId, eq(list.id, id)))
+    // Renaming is an owner action: an editor may change what is in a list, not the list.
+    .where(ownedByUser(userId, eq(list.id, id)))
     .returning();
   return row ?? null;
 }
@@ -75,7 +81,7 @@ export async function updateList(
 export async function deleteList(userId: UserId, id: string, database: ListsDatabase = db()) {
   const rows = await database
     .delete(list)
-    .where(ownedBy(userId, eq(list.id, id)))
+    .where(ownedByUser(userId, eq(list.id, id)))
     .returning({ id: list.id });
   return rows.length > 0;
 }
@@ -96,7 +102,7 @@ export async function reorderList(
     const ordered = await tx
       .select({ id: list.id, position: list.position })
       .from(list)
-      .where(ownedBy(userId))
+      .where(ownedByUser(userId))
       .orderBy(asc(list.position));
 
     if (!ordered.some((row) => row.id === input.id)) return false;
@@ -107,7 +113,7 @@ export async function reorderList(
       await tx
         .update(list)
         .set({ position: positionBetween(before, after), updatedAt: new Date() })
-        .where(ownedBy(userId, eq(list.id, input.id)));
+        .where(ownedByUser(userId, eq(list.id, input.id)));
       return true;
     } catch (error) {
       if (!(error instanceof PositionExhaustedError)) throw error;
@@ -126,7 +132,7 @@ export async function reorderList(
       await tx
         .update(list)
         .set({ position, updatedAt: new Date() })
-        .where(ownedBy(userId, eq(list.id, row.id)));
+        .where(ownedByUser(userId, eq(list.id, row.id)));
     }
     return true;
   });

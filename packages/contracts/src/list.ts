@@ -44,5 +44,23 @@ export const reorderListSchema = z.object({
   afterId: listIdSchema.nullable(),
 });
 
+export const shareRoleSchema = z.enum(['viewer', 'editor']);
+export type ShareRole = z.infer<typeof shareRoleSchema>;
+
+export const shareListSchema = z.object({
+  listId: listIdSchema,
+  // Normalised here so 'A@B.com' and 'a@b.com' reach the same account.
+  email: z
+    .string()
+    .transform((value) => value.trim().toLowerCase())
+    .pipe(z.email('Enter a valid email address')),
+  role: shareRoleSchema,
+});
+
+export const revokeShareSchema = z.object({
+  listId: listIdSchema,
+  userId: z.string().min(1),
+});
+
 export type CreateList = z.infer<typeof createListSchema>;
 export type UpdateList = z.infer<typeof updateListSchema>;

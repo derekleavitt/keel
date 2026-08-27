@@ -61,6 +61,18 @@ pnpm db:sync     # push the current schema straight to the dev database
 point it at anything you care about. When the work merges, the integrator generates the
 real migration on `main`.
 
+> **`db:sync` and `db:migrate` cannot share a database.** `push` records nothing in the
+> migration ledger, so a later `db:migrate` tries to re-apply migrations for tables that
+> already exist and fails — with drizzle-kit reporting the cause as the literal string
+> `undefined`, which sends you looking at the SQL rather than the ledger.
+>
+> Pick one per database. If you have pushed, run `pnpm db:reset` before migrating again.
+> See `.orchestration/lessons/L-022.md`.
+
+**Never swallow migrate output.** `pnpm db:migrate >/dev/null 2>&1 || true` hides a failed
+migration, and the gate skips e2e by default — so the first symptom is a browser test
+hanging on a page that is throwing.
+
 **Your tables are still testable before that migration exists.** `createTestDatabase()`
 derives the pending delta from `schema` and applies it, so a branch tests its new tables
 against real Postgres with real foreign keys and real cascades. You do not need to commit

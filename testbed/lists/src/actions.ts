@@ -1,7 +1,13 @@
 'use server';
 
 import { requireUserId } from '@keel/auth/session';
-import { createListSchema, reorderListSchema, updateListSchema } from '@keel/contracts/list';
+import {
+  createListSchema,
+  reorderListSchema,
+  revokeShareSchema,
+  shareListSchema,
+  updateListSchema,
+} from '@keel/contracts/list';
 import { revalidatePath } from '@keel/runtime';
 
 /*
@@ -13,6 +19,7 @@ import { revalidatePath } from '@keel/runtime';
  * .orchestration/lessons/L-021.md.
  */
 import { createList, deleteList, reorderList, updateList } from './queries.ts';
+import { revokeShare, shareList } from './sharing.ts';
 
 /**
  * Server actions.
@@ -62,6 +69,38 @@ export async function reorderListAction(input: unknown) {
 
   const moved = await reorderList(userId, parsed.data);
   if (!moved) return { ok: false as const, error: 'List not found' };
+  revalidatePath('/lists', 'layout');
+  return { ok: true as const };
+}
+
+export async function shareListAction(input: unknown) {
+  const userId = await requireUserId();
+  const parsed = shareListSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false as const, error: parsed.error.issues[0]?.message ?? 'Invalid' };
+  }
+
+  const result = await shareList(userId, parsed.data);
+  if (!result.ok) {
+    const messages = {
+      'not-owner': 'Only the owner can share this list',
+      'no-such-user': 'No account with that email',
+      self: 'That list is already yours',
+    } as const;
+    return { ok: false as const, error: messages[result.reason] };
+  }
+
+  revalidatePath('/lists', 'layout');
+  return { ok: true as const };
+}
+
+export async function revokeShareAction(input: unknown) {
+  const userId = await requireUserId();
+  const parsed = revokeShareSchema.safeParse(input);
+  if (!parsed.success) return { ok: false as const, error: 'Invalid' };
+
+  const removed = await revokeShare(userId, parsed.data);
+  if (!removed) return { ok: false as const, error: 'Nothing to revoke' };
   revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }
