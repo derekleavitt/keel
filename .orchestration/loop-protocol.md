@@ -170,12 +170,28 @@ not once at the end.
 - Push. Confirm CI green before considering the task done.
 - Set `status: done`, remove the lock, append a journal entry naming the friction found.
 
-### 9. Checkpoint with the human
+### 9. Continue
 
-Stop and report after **every completed testbed feature**, not every task. Say what
-shipped, what friction it exposed, what Keel work that generated, and what is next.
+**Do not stop at feature boundaries.** Land the feature, append the journal entry, and
+begin the next one.
 
-Individual Keel tasks pulled mid-feature need no checkpoint.
+Surface to the human only when:
+
+- A circuit breaker trips.
+- Something is broken that you cannot fix — and "cannot fix" means you tried, not that it
+  looks tedious.
+- A decision is genuinely the human's: a shipped design must change, a vendor must be
+  chosen, money must be spent, or a `predicted` task should be deleted rather than built.
+- A whole capability in `docs/platform-readiness.md` is complete.
+
+Everything else goes in the journal and keeps moving. The journal is the record; a running
+commentary is not.
+
+**Judgement to apply.** The temptation when running unattended is to route around friction
+rather than promote it, because routing around ships the feature and promoting it does not.
+T-01 nearly lost `typedRoutes` that way — disabling it would have produced a green gate, a
+working feature, and a silently removed safety property. When an obstacle offers an easy
+detour, that is the signal to look harder, not to take it.
 
 ---
 

@@ -24,6 +24,8 @@ KEEL_E2E=1 pnpm verify   # include the browser smoke test
 | `packages/db` | Drizzle schema, migrations, the `db()` handle. |
 | `packages/auth` | Better Auth config. Nothing else may import `better-auth`. |
 | `packages/ui` | Shared components and design tokens. No business logic. |
+| `packages/runtime` | The only sanctioned way a feature package reaches a Next API. Currently `revalidatePath`/`revalidateTag`. |
+| `testbed/*` | The todo app Keel is developed against. Not part of the template. |
 
 Internal packages export TypeScript source directly — there is no build step between
 editing a package and seeing the effect. Do not add one.
@@ -80,6 +82,10 @@ them have shipped wrong code.
 - **Never import from a barrel that re-exports you.** `contracts/src/index.ts` re-exports
   the feature modules, so importing from it inside one of them is a TDZ crash at module
   eval — not a lint error.
+- **Need a framework API in a feature package?** Use `@keel/runtime`. Importing `next/*`
+  inside `testbed/**` or a non-owning package is a lint error with a message naming the
+  replacement. If what you need is not exported there, that is a design question — do not
+  add `next` as a dependency.
 - **Session access is `@keel/auth/session`** — `requireUser()`, `requireUserId()`,
   `currentUser()`. Do not write your own, and do not add `next` to a feature package to
   get at `headers()`.

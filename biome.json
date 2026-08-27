@@ -50,5 +50,33 @@
     "formatter": {
       "enabled": true
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "testbed/**",
+        "packages/contracts/**",
+        "packages/db/**",
+        "packages/ui/**",
+        "examples/**"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "next/cache": "Import from '@keel/runtime'. Feature packages must not depend on next \u2014 see .claude/rules/server-actions.md and packages/runtime/src/index.ts.",
+                  "next/headers": "Use '@keel/auth/session' (requireUser, currentUser). A feature package wanting raw headers almost always wants the session.",
+                  "next/navigation": "Feature packages must not decide where the user goes. Return a result and let the route redirect.",
+                  "next": "Feature packages must not depend on next. '@keel/runtime' owns the sanctioned crossing points."
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
 }
