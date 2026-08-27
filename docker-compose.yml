@@ -1,0 +1,27 @@
+# Local development database.
+#
+# Not for production — this exists so a clean checkout can run the app within a minute,
+# without an account anywhere. Bring it up with `pnpm db:up`.
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: keel-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: keel
+      POSTGRES_PASSWORD: keel
+      POSTGRES_DB: keel
+    ports:
+      - '5432:5432'
+    volumes:
+      # Postgres 18+ requires the mount at /var/lib/postgresql, NOT /var/lib/postgresql/data.
+      # The older path leaves the container crash-looping on startup.
+      - keel-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U keel -d keel']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  keel-pgdata:

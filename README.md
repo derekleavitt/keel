@@ -89,20 +89,20 @@ editing a package and seeing the effect.
 
 ```bash
 pnpm install
-cp .env.example .env    # add a DATABASE_URL and BETTER_AUTH_SECRET
+pnpm db:up        # starts Postgres in Docker, writes .env with a generated secret
 pnpm db:migrate
 pnpm dev
 ```
 
+That is the whole setup. No account anywhere, no `.env` to hand-edit, no Postgres to
+install. `pnpm db:down` stops it; `pnpm db:reset` wipes and recreates it.
+
+Already have a database? Skip `db:up`, copy `.env.example` to `.env` and point
+`DATABASE_URL` at it.
+
 `pnpm verify` passes on a clean checkout with **no `.env` at all** — environment,
 database and auth are all lazily initialised, so typecheck, lint, tests and build never
 require secrets. You only need a database once you want the app to actually run.
-
-Generate a secret with:
-
-```bash
-openssl rand -base64 32
-```
 
 ## For agents
 

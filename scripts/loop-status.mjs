@@ -100,7 +100,6 @@ const inFlight = tasks.filter((t) => t.status === 'claimed');
 // pulled only when building a feature demands them. Predictions are never "next".
 const features = tasks.filter((t) => t.kind === 'feature');
 const keelTasks = tasks.filter((t) => t.kind !== 'feature');
-const predicted = keelTasks.filter((t) => t.status === 'predicted');
 const openKeel = keelTasks.filter(
   (t) => t.status === 'open' && t.dependsOn.every((d) => done.has(d)),
 );

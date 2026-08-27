@@ -17,6 +17,9 @@
     "loop:status": "node scripts/loop-status.mjs",
     "loop:guard": "node scripts/loop-guard.mjs",
     "lessons": "node scripts/lessons-validate.mjs",
+    "db:up": "node scripts/db-up.mjs",
+    "db:down": "docker compose down",
+    "db:reset": "docker compose down -v && node scripts/db-up.mjs",
     "db:generate": "pnpm --filter @keel/db generate",
     "db:migrate": "pnpm --filter @keel/db migrate",
     "db:studio": "pnpm --filter @keel/db studio"
