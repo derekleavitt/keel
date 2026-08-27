@@ -34,6 +34,9 @@ export default async function DashboardPage() {
           <Link href="/lists" className="text-sm text-accent underline underline-offset-4">
             Go to your lists
           </Link>
+          <Link href="/search" className="text-sm text-accent underline underline-offset-4">
+            Search everything
+          </Link>
         </div>
       </div>
     </main>

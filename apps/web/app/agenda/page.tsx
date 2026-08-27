@@ -1,5 +1,5 @@
 import { requireUserOrRedirect } from '@keel/auth/session';
-import { buildAgenda } from '@keel/testbed-agenda';
+import { buildAgenda } from '@keel/testbed-views';
 import Link from 'next/link';
 import { SignOutButton } from '../sign-out-button.tsx';
 import { agendaForTimeZone } from './actions.ts';

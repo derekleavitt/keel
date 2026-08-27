@@ -27,8 +27,8 @@ territories:
     owns: [pkg:testbed-todos, "route:/lists/[id]"]
   tags:
     owns: [pkg:testbed-tags]
-  agenda:
-    owns: [pkg:testbed-agenda, "route:/agenda"]
+  views:
+    owns: [pkg:testbed-views, "route:/agenda", "route:/search"]
     # RESOLVED by T-07, see docs/adr/0001-cross-feature-read-models.md.
     # A cross-feature read model depends on several features and is depended on by nothing
     # but the app. It writes no SQL of its own and performs no writes at all.

@@ -25,7 +25,7 @@ KEEL_E2E=1 pnpm verify   # include the browser smoke test
 | `packages/auth` | Better Auth config. Nothing else may import `better-auth`. |
 | `packages/ui` | Shared components and design tokens. No business logic. |
 | `packages/runtime` | The only sanctioned way a feature package reaches a Next API. Currently `revalidatePath`/`revalidateTag`. |
-| `testbed/agenda` | A **cross-feature read model**. Depends on several features, depended on by nothing but the app, writes no SQL of its own. Copy this shape for search, dashboards or admin — see `docs/adr/0001-cross-feature-read-models.md`. |
+| `testbed/views` | **Cross-feature read models** (agenda, search). Depend on several features, depended on by nothing but the app, write no SQL of their own. Copy this shape for dashboards or admin — see `docs/adr/0001-cross-feature-read-models.md`. |
 | `testbed/*` | The todo app Keel is developed against. Not part of the template. |
 
 Internal packages export TypeScript source directly — there is no build step between

@@ -1,6 +1,6 @@
 'use client';
 
-import type { Agenda } from '@keel/testbed-agenda';
+import type { Agenda } from '@keel/testbed-views';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 

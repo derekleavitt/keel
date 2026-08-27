@@ -1,7 +1,7 @@
 'use server';
 
 import { requireUserId } from '@keel/auth/session';
-import { type Agenda, buildAgenda } from '@keel/testbed-agenda';
+import { type Agenda, buildAgenda } from '@keel/testbed-views';
 
 /** Re-read the agenda for a timezone only the browser knows. */
 export async function agendaForTimeZone(timeZone: unknown): Promise<Agenda> {
