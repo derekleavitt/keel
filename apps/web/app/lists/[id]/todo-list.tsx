@@ -1,11 +1,19 @@
 'use client';
 
+import type { TodoPriority } from '@keel/contracts/todo';
 import { createTodoAction, deleteTodoAction, setTodoDoneAction } from '@keel/testbed-todos/actions';
 import { Button } from '@keel/ui';
 import { useRouter } from 'next/navigation';
 import { useOptimistic, useRef, useState, useTransition } from 'react';
+import { TodoDetail } from './todo-detail.tsx';
 
-type Row = { id: string; title: string; done: boolean };
+type Row = {
+  id: string;
+  title: string;
+  done: boolean;
+  dueDate: string | null;
+  priority: TodoPriority;
+};
 
 export function TodoList({ listId, rows }: { listId: string; rows: Row[] }) {
   const router = useRouter();
@@ -97,11 +105,17 @@ export function TodoList({ listId, rows }: { listId: string; rows: Row[] }) {
                   }}
                   className="size-4 accent-accent"
                 />
-                <span
-                  className={row.done ? 'flex-1 text-sm text-muted line-through' : 'flex-1 text-sm'}
-                >
-                  {row.title}
-                </span>
+                <div className="flex flex-1 flex-col gap-2">
+                  <span className={row.done ? 'text-sm text-muted line-through' : 'text-sm'}>
+                    {row.title}
+                  </span>
+                  <TodoDetail
+                    id={row.id}
+                    title={row.title}
+                    dueDate={row.dueDate}
+                    priority={row.priority}
+                  />
+                </div>
                 <Button
                   size="sm"
                   variant="ghost"

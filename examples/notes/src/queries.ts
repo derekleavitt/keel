@@ -23,7 +23,14 @@ import { note } from './schema.ts';
  *    importing this module opens no connection and `pnpm verify` still passes with no
  *    `.env`.
  *
- * 3. SCOPING IS STRUCTURAL, NOT REMEMBERED. `userId` is the branded `UserId`, so a raw
+ * 3. THE PARAMETER ORDER IS A CONTRACT, NOT A STYLE. `userId` first, then the arguments
+ *    the operation needs, then the database handle **last**. Never insert a parameter
+ *    before the handle: an all-optional options type is satisfied by *any* object, so
+ *    TypeScript will happily accept the database sitting in the new slot and the query
+ *    will silently run against a default connection. New options go inside an existing
+ *    options object. See .orchestration/lessons/L-017.md.
+ *
+ * 4. SCOPING IS STRUCTURAL, NOT REMEMBERED. `userId` is the branded `UserId`, so a raw
  *    string will not type-check — an unvalidated id cannot reach this layer at all. Every
  *    statement goes through `ownedBy()`, so forgetting the scope means writing no
  *    predicate at all rather than writing a leaky one.

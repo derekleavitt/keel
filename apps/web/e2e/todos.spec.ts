@@ -78,3 +78,43 @@ test('one user cannot open another user’s list', async ({ page }) => {
   const response = await page.goto(url);
   expect(response?.status()).toBe(404);
 });
+
+test('due date and priority persist and survive a reload', async ({ page }) => {
+  await signUpWithList(page, 'Planning');
+  await quickAdd(page, 'Book flights');
+
+  await page.getByLabel('Due date for Book flights').fill('2026-09-15');
+  await expect(page.getByLabel('Due date for Book flights')).toHaveValue('2026-09-15');
+
+  await page.getByLabel('Priority for Book flights').selectOption('high');
+
+  await page.reload();
+  // A date stored as a DATE column comes back as the same calendar day, whatever the
+  // browser's timezone. A timestamp would shift it.
+  await expect(page.getByLabel('Due date for Book flights')).toHaveValue('2026-09-15');
+  await expect(page.getByLabel('Priority for Book flights')).toHaveValue('high');
+});
+
+test('higher priority sorts first', async ({ page }) => {
+  await signUpWithList(page, 'Triage');
+  await quickAdd(page, 'Low thing');
+  await quickAdd(page, 'Urgent thing');
+
+  await page.getByLabel('Priority for Urgent thing').selectOption('high');
+  await expect(page.getByRole('listitem').first()).toContainText('Urgent thing');
+
+  await page.reload();
+  await expect(page.getByRole('listitem').first()).toContainText('Urgent thing');
+});
+
+test('a due date can be cleared, not just set', async ({ page }) => {
+  await signUpWithList(page, 'Clearing');
+  await quickAdd(page, 'Dated');
+
+  await page.getByLabel('Due date for Dated').fill('2026-09-15');
+  await expect(page.getByLabel('Due date for Dated')).toHaveValue('2026-09-15');
+
+  await page.getByLabel('Due date for Dated').fill('');
+  await page.reload();
+  await expect(page.getByLabel('Due date for Dated')).toHaveValue('');
+});
