@@ -59,7 +59,7 @@ them have shipped wrong code.
 | `docs/architecture.md` | Why the repo is shaped this way, and what is designed but not yet built. |
 | `docs/decomposition-log.md` | If present: the architectural decisions behind the current backlog — ordering strategy, auth enforcement, cascade directions. Read it before designing anything. |
 | `.orchestration/territories.yaml` | If present: who owns what, and which files are serialized. |
-| `.orchestration/RESUME.md` | If present: where the last session stopped and what to do next. **Read this first when starting cold.** Regenerate with `pnpm loop:status`. |
+| `.orchestration/RESUME.md` | Where the last session stopped and what to do next. **Run `pnpm loop:status` first to generate it, then read it.** It is not committed — a checked-in copy would describe someone else's machine. |
 | `.orchestration/loop-protocol.md` | How one build iteration works, and why the testbed drives Keel rather than the other way round. |
 | `testbed/README.md` | The todo app Keel is developed against. Friction building it is what generates Keel's backlog. |
 | `examples/notes` | The reference vertical slice. **Copy this shape** for any feature package. |
