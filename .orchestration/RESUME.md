@@ -3,7 +3,7 @@
 _Written for someone with **no memory of previous sessions**. Everything needed to
 continue is in this file or linked from it. Regenerate with `pnpm loop:status`._
 
-Generated 2026-08-27 20:33 UTC.
+Generated 2026-08-27 20:37 UTC.
 
 ---
 
@@ -23,26 +23,10 @@ shipped and green. Phases 1-6 are being built by a loop.
 1. There are uncommitted changes:
 
 ```
-M .orchestration/RESUME.md
- M .orchestration/status.md
- M .orchestration/tasks/T-01.md
- M README.md
- M apps/web/next.config.ts
- M package.json
- M packages/contracts/src/env.test.ts
- M packages/db/drizzle.config.ts
- M packages/db/drizzle/meta/_journal.json
- M packages/db/src/schema/auth.ts
+M .github/workflows/verify.yml
+ M .gitignore
+D  .orchestration/loop-state.json
  M scripts/loop-status.mjs
-?? .orchestration/journal/2026-08-27-K-001.md
-?? .orchestration/lessons/L-010.md
-?? .orchestration/lessons/L-011.md
-?? .orchestration/tasks/K-001.md
-?? apps/web/e2e/auth.spec.ts
-?? docker-compose.yml
-?? packages/db/drizzle/0001_account_issuer.sql
-?? packages/db/drizzle/meta/0001_snapshot.json
-?? scripts/db-up.mjs
 ```
 
 Run `pnpm verify`. If green, commit them. If red, decide whether to finish the work or run `git checkout -- .` and restart the task cleanly.

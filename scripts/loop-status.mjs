@@ -109,7 +109,14 @@ const openFeatures = features.filter(
 // A pulled Keel task blocks the feature that demanded it, so it goes first.
 const unblocked = [...openKeel, ...openFeatures];
 
-const dirty = git('status --porcelain');
+// Exclude this script's own outputs. Writing RESUME.md and status.md dirties the tree,
+// which would make every run report MID-TASK immediately after the previous run — the
+// check would never report a clean stop again.
+const DERIVED = ['.orchestration/RESUME.md', '.orchestration/status.md'];
+const dirty = git('status --porcelain')
+  .split('\n')
+  .filter((line) => line.trim() && !DERIVED.some((f) => line.endsWith(f)))
+  .join('\n');
 const branch = git('rev-parse --abbrev-ref HEAD', 'unknown');
 const lastCommit = git('log -1 --format=%h|%s|%cr').split('|');
 const unpushed = git('log --oneline @{u}..HEAD').split('\n').filter(Boolean).length;
