@@ -59,6 +59,7 @@ them have shipped wrong code.
 | `docs/architecture.md` | Why the repo is shaped this way, and what is designed but not yet built. |
 | `docs/decomposition-log.md` | If present: the architectural decisions behind the current backlog — ordering strategy, auth enforcement, cascade directions. Read it before designing anything. |
 | `.orchestration/territories.yaml` | If present: who owns what, and which files are serialized. |
+| `.orchestration/RESUME.md` | If present: where the last session stopped and what to do next. **Read this first when starting cold.** Regenerate with `pnpm loop:status`. |
 
 ## House idioms
 
