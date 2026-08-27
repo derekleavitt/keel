@@ -6,7 +6,7 @@ import {
   createTodo,
   deleteTodo,
   getTodo,
-  listAgenda,
+  listDueTodos,
   listTodos,
   setTodoDone,
   updateTodo,
@@ -188,7 +188,7 @@ describe('due dates and priority', () => {
     expect(outstanding).toHaveLength(2);
   });
 
-  it('builds a cross-list agenda of what is due, scoped to the user', async () => {
+  it('returns outstanding todos due on or before a day, scoped to the user', async () => {
     const second = await createList(owner, { name: 'Second' }, database);
     await createTodo(owner, { listId: ownerList, title: 'Late', dueDate: '2026-01-01' }, database);
     await createTodo(owner, { listId: second.id, title: 'Today', dueDate: '2026-06-15' }, database);
@@ -199,8 +199,10 @@ describe('due dates and priority', () => {
       database,
     );
 
-    const agenda = await listAgenda(owner, '2026-06-15', database);
-    expect(agenda.map((r) => r.title)).toEqual(['Late', 'Today']);
-    expect(agenda[1]?.listName).toBe('Second');
+    const due = await listDueTodos(owner, '2026-06-15', database);
+    expect(due.map((row) => row.title)).toEqual(['Late', 'Today']);
+    // No list name here on purpose — composing across features is the agenda package's
+    // job, not this one's. See testbed/agenda/src/agenda.ts.
+    expect(due[1]?.listId).toBe(second.id);
   });
 });

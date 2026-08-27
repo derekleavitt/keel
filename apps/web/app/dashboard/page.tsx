@@ -27,9 +27,14 @@ export default async function DashboardPage() {
       </header>
 
       <div className="rounded-lg border border-line bg-surface px-5 py-4">
-        <Link href="/lists" className="text-sm text-accent underline underline-offset-4">
-          Go to your lists
-        </Link>
+        <div className="flex flex-col gap-2">
+          <Link href="/agenda" className="text-sm text-accent underline underline-offset-4">
+            What's due today
+          </Link>
+          <Link href="/lists" className="text-sm text-accent underline underline-offset-4">
+            Go to your lists
+          </Link>
+        </div>
       </div>
     </main>
   );

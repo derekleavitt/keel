@@ -25,6 +25,7 @@ KEEL_E2E=1 pnpm verify   # include the browser smoke test
 | `packages/auth` | Better Auth config. Nothing else may import `better-auth`. |
 | `packages/ui` | Shared components and design tokens. No business logic. |
 | `packages/runtime` | The only sanctioned way a feature package reaches a Next API. Currently `revalidatePath`/`revalidateTag`. |
+| `testbed/agenda` | A **cross-feature read model**. Depends on several features, depended on by nothing but the app, writes no SQL of its own. Copy this shape for search, dashboards or admin — see `docs/adr/0001-cross-feature-read-models.md`. |
 | `testbed/*` | The todo app Keel is developed against. Not part of the template. |
 
 Internal packages export TypeScript source directly — there is no build step between
@@ -86,6 +87,10 @@ them have shipped wrong code.
   inside `testbed/**` or a non-owning package is a lint error with a message naming the
   replacement. If what you need is not exported there, that is a design question — do not
   add `next` as a dependency.
+- **A feature package must never read another feature's tables.** If a view spans
+  features, it belongs in a composition package that depends on them and is depended on by
+  nothing but the app. `testbed/agenda` is the reference. A feature that joins its
+  neighbour's table works fine and is how ownership decays, one reasonable commit at a time.
 - **Session access is `@keel/auth/session`** — `requireUser()`, `requireUserId()`,
   `currentUser()`. Do not write your own, and do not add `next` to a feature package to
   get at `headers()`.

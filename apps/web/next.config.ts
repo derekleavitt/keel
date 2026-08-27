@@ -28,6 +28,7 @@ const config: NextConfig = {
     '@keel/db',
     '@keel/contracts',
     '@keel/runtime',
+    '@keel/testbed-agenda',
     '@keel/testbed-lists',
     '@keel/testbed-tags',
     '@keel/testbed-todos',
