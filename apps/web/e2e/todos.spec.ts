@@ -118,3 +118,47 @@ test('a due date can be cleared, not just set', async ({ page }) => {
   await page.reload();
   await expect(page.getByLabel('Due date for Dated')).toHaveValue('');
 });
+
+test('mutations fired back to back all persist', async ({ page }) => {
+  // The regression test for L-021. Before the mutation queue, firing these without
+  // pausing between them silently dropped one: it applied optimistically, then a later
+  // revalidation rendered server state fetched before the write landed and reverted it.
+  //
+  // No settle-waits here on purpose. If this needs one to pass, the queue is not working.
+  await signUpWithList(page, 'Rapid');
+  await quickAdd(page, 'Alpha');
+  await quickAdd(page, 'Beta');
+
+  await page.getByLabel('Priority for Alpha').selectOption('high');
+  await page.getByLabel('Priority for Beta').selectOption('medium');
+  await page.getByLabel('Mark Alpha done').check();
+
+  // Wait for the app to go idle before reloading. Controls are disabled while any
+  // mutation is queued, so an enabled checkbox means the queue drained AND the refresh
+  // landed. This is waiting for the application to finish, not papering over a lost
+  // write — the writes are already in the database by this point.
+  await expect(page.getByLabel(/^Mark Alpha/)).toBeEnabled();
+
+  // A reload proves the server agrees, not just the optimistic client state.
+  await page.reload();
+
+  await expect(page.getByLabel('Priority for Alpha')).toHaveValue('high');
+  await expect(page.getByLabel('Priority for Beta')).toHaveValue('medium');
+  await expect(page.getByLabel('Mark Alpha not done')).toBeChecked();
+  await expect(page.getByText('1 outstanding')).toBeVisible();
+});
+
+test('a burst of ticks on one todo settles on the last one', async ({ page }) => {
+  await signUpWithList(page, 'Burst');
+  await quickAdd(page, 'Flip flop');
+
+  for (const done of [true, false, true]) {
+    await page
+      .getByLabel(done ? 'Mark Flip flop done' : 'Mark Flip flop not done')
+      .setChecked(done);
+  }
+
+  await page.reload();
+  await expect(page.getByLabel('Mark Flip flop not done')).toBeChecked();
+  await expect(page.getByText('All done.')).toBeVisible();
+});

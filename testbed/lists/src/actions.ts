@@ -3,6 +3,15 @@
 import { requireUserId } from '@keel/auth/session';
 import { createListSchema, reorderListSchema, updateListSchema } from '@keel/contracts/list';
 import { revalidatePath } from '@keel/runtime';
+
+/*
+ * Revalidating `/lists` alone does NOT invalidate `/lists/[id]`. The write lands, the
+ * server is correct, and the client keeps serving a cached payload for the page the user
+ * is actually looking at — which reads as a lost write.
+ *
+ * The `'layout'` variant invalidates the segment and everything nested under it. See
+ * .orchestration/lessons/L-021.md.
+ */
 import { createList, deleteList, reorderList, updateList } from './queries.ts';
 
 /**
@@ -19,7 +28,7 @@ export async function createListAction(input: unknown) {
     return { ok: false as const, error: parsed.error.issues[0]?.message ?? 'Invalid' };
 
   await createList(userId, parsed.data);
-  revalidatePath('/lists');
+  revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }
 
@@ -32,7 +41,7 @@ export async function updateListAction(id: unknown, patch: unknown) {
 
   const row = await updateList(userId, id, parsed.data);
   if (!row) return { ok: false as const, error: 'List not found' };
-  revalidatePath('/lists');
+  revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }
 
@@ -42,7 +51,7 @@ export async function deleteListAction(id: unknown) {
 
   const removed = await deleteList(userId, id);
   if (!removed) return { ok: false as const, error: 'List not found' };
-  revalidatePath('/lists');
+  revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }
 
@@ -53,6 +62,6 @@ export async function reorderListAction(input: unknown) {
 
   const moved = await reorderList(userId, parsed.data);
   if (!moved) return { ok: false as const, error: 'List not found' };
-  revalidatePath('/lists');
+  revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }

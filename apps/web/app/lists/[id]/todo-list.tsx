@@ -2,9 +2,9 @@
 
 import type { TodoPriority } from '@keel/contracts/todo';
 import { createTodoAction, deleteTodoAction, setTodoDoneAction } from '@keel/testbed-todos/actions';
-import { Button } from '@keel/ui';
+import { Button, useSerialMutations } from '@keel/ui';
 import { useRouter } from 'next/navigation';
-import { useOptimistic, useRef, useState, useTransition } from 'react';
+import { useOptimistic, useRef, useState } from 'react';
 import { TodoDetail } from './todo-detail.tsx';
 import { type TagChip, TodoTags } from './todo-tags.tsx';
 
@@ -30,9 +30,18 @@ export function TodoList({
   filtered?: boolean;
 }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  /**
+   * Mutations run one at a time. Overlapping them lets a later revalidation render server
+   * state fetched before an earlier write landed, silently reverting it — see
+   * .orchestration/lessons/L-021.md.
+   */
+  const { enqueue, pending } = useSerialMutations({
+    onSettled: () => router.refresh(),
+    onError: setError,
+  });
 
   /**
    * Optimistic completion state.
@@ -54,11 +63,7 @@ export function TodoList({
 
   function run(action: () => Promise<{ ok: boolean; error?: string }>) {
     setError(null);
-    startTransition(async () => {
-      const result = await action();
-      if (!result.ok) setError(result.error ?? 'Something went wrong');
-      router.refresh();
-    });
+    enqueue(action);
   }
 
   // Sorting client-side mirrors the query's `order by done, position`, so an optimistic
@@ -115,11 +120,10 @@ export function TodoList({
                   aria-label={`Mark ${row.title} ${row.done ? 'not done' : 'done'}`}
                   onChange={(event) => {
                     const done = event.target.checked;
-                    startTransition(async () => {
+                    setError(null);
+                    enqueue(async () => {
                       applyOptimistic({ id: row.id, done });
-                      const result = await setTodoDoneAction({ id: row.id, done });
-                      if (!result.ok) setError(result.error ?? 'Something went wrong');
-                      router.refresh();
+                      return setTodoDoneAction({ id: row.id, done });
                     });
                   }}
                   className="mt-1 size-4 accent-accent"

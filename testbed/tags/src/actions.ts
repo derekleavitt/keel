@@ -8,6 +8,15 @@ import {
   updateTagSchema,
 } from '@keel/contracts/tag';
 import { revalidatePath } from '@keel/runtime';
+
+/*
+ * Revalidating `/lists` alone does NOT invalidate `/lists/[id]`. The write lands, the
+ * server is correct, and the client keeps serving a cached payload for the page the user
+ * is actually looking at — which reads as a lost write.
+ *
+ * The `'layout'` variant invalidates the segment and everything nested under it. See
+ * .orchestration/lessons/L-021.md.
+ */
 import { attachTag, createTag, deleteTag, detachTag, tagTodoByName, updateTag } from './queries.ts';
 
 /**
@@ -25,7 +34,7 @@ export async function createTagAction(input: unknown) {
 
   const row = await createTag(userId, parsed.data);
   if (!row) return { ok: false as const, error: 'You already have a tag with that name' };
-  revalidatePath('/lists');
+  revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }
 
@@ -38,7 +47,7 @@ export async function updateTagAction(id: unknown, patch: unknown) {
 
   const row = await updateTag(userId, id, parsed.data);
   if (!row) return { ok: false as const, error: 'Tag not found' };
-  revalidatePath('/lists');
+  revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }
 
@@ -53,7 +62,7 @@ export async function deleteTagAction(id: unknown) {
 
   const removed = await deleteTag(userId, id);
   if (!removed) return { ok: false as const, error: 'Tag not found' };
-  revalidatePath('/lists');
+  revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }
 
@@ -64,7 +73,7 @@ export async function attachTagAction(input: unknown) {
 
   const attached = await attachTag(userId, parsed.data);
   if (!attached) return { ok: false as const, error: 'Todo or tag not found' };
-  revalidatePath('/lists');
+  revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }
 
@@ -75,7 +84,7 @@ export async function detachTagAction(input: unknown) {
 
   const detached = await detachTag(userId, parsed.data);
   if (!detached) return { ok: false as const, error: 'That todo is not tagged with that tag' };
-  revalidatePath('/lists');
+  revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }
 
@@ -88,6 +97,6 @@ export async function tagTodoByNameAction(input: unknown) {
 
   const row = await tagTodoByName(userId, parsed.data);
   if (!row) return { ok: false as const, error: 'Todo not found' };
-  revalidatePath('/lists');
+  revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }

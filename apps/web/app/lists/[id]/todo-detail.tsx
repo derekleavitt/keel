@@ -2,8 +2,9 @@
 
 import { TODO_PRIORITIES, type TodoPriority } from '@keel/contracts/todo';
 import { updateTodoAction } from '@keel/testbed-todos/actions';
+import { useSerialMutations } from '@keel/ui';
 import { useRouter } from 'next/navigation';
-import { useState, useTransition } from 'react';
+import { useState } from 'react';
 
 const LABELS: Record<TodoPriority, string> = {
   none: 'No priority',
@@ -30,16 +31,15 @@ export function TodoDetail({
   priority: TodoPriority;
 }) {
   const router = useRouter();
-  const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const { enqueue, pending } = useSerialMutations({
+    onSettled: () => router.refresh(),
+    onError: setError,
+  });
 
   function save(patch: { dueDate?: string | null; priority?: TodoPriority }) {
     setError(null);
-    startTransition(async () => {
-      const result = await updateTodoAction(id, patch);
-      if (!result.ok) setError(result.error ?? 'Something went wrong');
-      router.refresh();
-    });
+    enqueue(() => updateTodoAction(id, patch));
   }
 
   return (
