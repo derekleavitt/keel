@@ -7,6 +7,7 @@ import {
   updateListAction,
 } from '@keel/testbed-lists/actions';
 import { Button } from '@keel/ui';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, useTransition } from 'react';
 
@@ -77,7 +78,12 @@ export function ListManager({ rows }: { rows: Row[] }) {
                 </form>
               ) : (
                 <>
-                  <span className="flex-1 text-sm">{row.name}</span>
+                  <Link
+                    href={`/lists/${row.id}`}
+                    className="flex-1 text-sm underline-offset-4 hover:underline"
+                  >
+                    {row.name}
+                  </Link>
                   <Button
                     size="sm"
                     variant="ghost"

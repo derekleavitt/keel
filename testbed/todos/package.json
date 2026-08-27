@@ -1,23 +1,27 @@
 {
-  "name": "@keel/contracts",
+  "name": "@keel/testbed-todos",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./env": "./src/env.ts",
-    "./ids": "./src/ids.ts",
-    "./list": "./src/list.ts",
-    "./todo": "./src/todo.ts"
+    "./actions": "./src/actions.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@keel/auth": "workspace:*",
+    "@keel/contracts": "workspace:*",
+    "@keel/db": "workspace:*",
+    "@keel/runtime": "workspace:*",
+    "@keel/testbed-lists": "workspace:*",
+    "drizzle-orm": "0.45.2",
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@types/node": "26.3.0",
     "typescript": "5.9.3",
     "vitest": "4.1.11"
