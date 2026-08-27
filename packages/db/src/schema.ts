@@ -64,4 +64,23 @@ export const verification = pgTable('verification', {
   updatedAt: timestamp('updated_at').$defaultFn(() => new Date()),
 });
 
-export const schema = { user, session, account, verification };
+/**
+ * Tables owned by the auth layer. Dictated by the Better Auth adapter.
+ */
+export const authTables = { user, session, account, verification };
+
+/**
+ * The full schema handed to Drizzle and to Better Auth.
+ *
+ * Assembled from per-area spreads rather than one flat literal. A feature adds its
+ * tables above and a single `...featureTables` line here — so parallel branches append
+ * distinct lines instead of all editing the same one. That turns the most collision-prone
+ * line in the repo into a mechanical merge.
+ *
+ * Feature tables must live in this file: `drizzle.config.ts` reads only this module, and
+ * moving them into feature packages would require `@keel/db` to import those packages,
+ * which is a workspace dependency cycle.
+ */
+export const schema = {
+  ...authTables,
+};
