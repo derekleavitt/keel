@@ -87,6 +87,9 @@ them have shipped wrong code.
   inside `testbed/**` or a non-owning package is a lint error with a message naming the
   replacement. If what you need is not exported there, that is a design question — do not
   add `next` as a dependency.
+- **Authorization is expressed once and composed.** `visibleVia()` / `editableVia()` from
+  `@keel/testbed-lists/access` are the reference. Never re-derive an access rule inline in
+  a query — that is how one query ends up more permissive than the rest.
 - **A feature package must never read another feature's tables.** If a view spans
   features, it belongs in a composition package that depends on them and is depended on by
   nothing but the app. `testbed/agenda` is the reference. A feature that joins its

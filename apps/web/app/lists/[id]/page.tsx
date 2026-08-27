@@ -1,10 +1,11 @@
 import { requireUserOrRedirect } from '@keel/auth/session';
 import { isTodoFilterNarrowing, type TodoFilter, todoFilterSchema } from '@keel/contracts/todo';
-import { getList } from '@keel/testbed-lists';
+import { getList, listShares, roleOnList } from '@keel/testbed-lists';
 import { listTags, listTagsForTodos } from '@keel/testbed-tags';
 import { listTodos } from '@keel/testbed-todos';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { SharePanel } from './share-panel.tsx';
 import { TodoFilters } from './todo-filters.tsx';
 import { TodoList } from './todo-list.tsx';
 
@@ -36,7 +37,11 @@ export default async function ListPage({
   const list = await getList(user.id, id);
   if (!list) notFound();
 
-  const todos = await listTodos(user.id, id, filter);
+  const [todos, role, shares] = await Promise.all([
+    listTodos(user.id, id, filter),
+    roleOnList(user.id, id),
+    listShares(user.id, id),
+  ]);
   // One query for every row's tags rather than one per row, and one for the suggestions
   // offered by the inline tag input. Tags are global to the user, so the second is not
   // scoped to this list.
@@ -55,7 +60,14 @@ export default async function ListPage({
           ← All lists
         </Link>
         <h1 className="text-2xl font-semibold tracking-tight">{list.name}</h1>
+        {role !== 'owner' && (
+          <p className="text-xs text-muted">
+            Shared with you · {role === 'editor' ? 'you can edit' : 'view only'}
+          </p>
+        )}
       </header>
+
+      {shares !== null && <SharePanel listId={id} shares={shares} />}
 
       <TodoFilters
         filter={filter}

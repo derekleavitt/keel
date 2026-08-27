@@ -43,6 +43,13 @@
       "when": 1787866782205,
       "tag": "0005_tag",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787871168749,
+      "tag": "0006_list_share",
+      "breakpoints": true
     }
   ]
 }

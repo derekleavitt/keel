@@ -3,10 +3,12 @@ import type { TodoFilter, TodoPriority } from '@keel/contracts/todo';
 import { db } from '@keel/db';
 import { list, type schema, todo, todoTag } from '@keel/db/schema';
 import {
+  editableVia,
   evenPositions,
   neighboursForMove,
   PositionExhaustedError,
   positionBetween,
+  visibleVia,
 } from '@keel/testbed-lists';
 import { and, asc, desc, eq, exists, ilike, inArray, lte, or, type SQL } from 'drizzle-orm';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
@@ -20,9 +22,23 @@ import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
  */
 export type TodosDatabase = PgDatabase<PgQueryResultHKT, typeof schema>;
 
-function ownedBy(userId: UserId, ...narrowing: (SQL | undefined)[]): SQL {
-  const owner = eq(todo.userId, userId);
-  return and(owner, ...narrowing) ?? owner;
+/**
+ * Access derives from the list, not the row.
+ *
+ * `todo.userId` records who created a todo; it no longer decides who may see it. On a
+ * shared list, a todo created by the owner must be visible to a grantee, and one created
+ * by a grantee must be visible to the owner — neither works if the scope is the row's own
+ * user. See `@keel/testbed-lists/access`.
+ */
+function visible(userId: UserId, ...narrowing: (SQL | undefined)[]): SQL {
+  const scope = visibleVia(todo.listId, userId);
+  return and(scope, ...narrowing) ?? scope;
+}
+
+/** Mutations additionally require an editor grant, or ownership of the list. */
+function editable(userId: UserId, ...narrowing: (SQL | undefined)[]): SQL {
+  const scope = editableVia(todo.listId, userId);
+  return and(scope, ...narrowing) ?? scope;
 }
 
 /**
@@ -63,7 +79,7 @@ export function buildTodoListQuery(
   return database
     .select()
     .from(todo)
-    .where(ownedBy(userId, ...narrowing))
+    .where(visible(userId, ...narrowing))
     .orderBy(asc(todo.done), desc(todo.priority), asc(todo.position));
 }
 
@@ -95,7 +111,7 @@ export async function listDueTodos(
   return database
     .select()
     .from(todo)
-    .where(ownedBy(userId, eq(todo.done, false), lte(todo.dueDate, onOrBefore)))
+    .where(visible(userId, eq(todo.done, false), lte(todo.dueDate, onOrBefore)))
     .orderBy(asc(todo.dueDate), desc(todo.priority));
 }
 
@@ -134,7 +150,7 @@ export async function searchTodos(userId: UserId, query: string, database: Todos
   return database
     .select()
     .from(todo)
-    .where(ownedBy(userId, ...narrowing))
+    .where(visible(userId, ...narrowing))
     .orderBy(asc(todo.done), desc(todo.priority), asc(todo.dueDate));
 }
 
@@ -142,7 +158,7 @@ export async function getTodo(userId: UserId, id: string, database: TodosDatabas
   const [row] = await database
     .select()
     .from(todo)
-    .where(ownedBy(userId, eq(todo.id, id)))
+    .where(visible(userId, eq(todo.id, id)))
     .limit(1);
   return row ?? null;
 }
@@ -165,12 +181,15 @@ export async function createTodo(
   },
   database: TodosDatabase = db(),
 ) {
-  const [owned] = await database
+  // Edit rights on the target list, not ownership of it — a grantee filing a todo into a
+  // list shared with them is the entire point of sharing. The foreign key only proves the
+  // list exists.
+  const [allowed] = await database
     .select({ id: list.id })
     .from(list)
-    .where(and(eq(list.id, input.listId), eq(list.userId, userId)))
+    .where(and(eq(list.id, input.listId), editableVia(list.id, userId)))
     .limit(1);
-  if (!owned) return null;
+  if (!allowed) return null;
 
   const existing = await listTodos(userId, input.listId, {}, database);
   const last = existing.at(-1)?.position ?? null;
@@ -206,7 +225,7 @@ export async function updateTodo(
   const [row] = await database
     .update(todo)
     .set({ ...patch, updatedAt: new Date() })
-    .where(ownedBy(userId, eq(todo.id, id)))
+    .where(editable(userId, eq(todo.id, id)))
     .returning();
   return row ?? null;
 }
@@ -220,7 +239,7 @@ export async function setTodoDone(
   const [row] = await database
     .update(todo)
     .set({ done, updatedAt: new Date() })
-    .where(ownedBy(userId, eq(todo.id, id)))
+    .where(editable(userId, eq(todo.id, id)))
     .returning();
   return row ?? null;
 }
@@ -244,7 +263,7 @@ export async function reorderTodo(
     const ordered = await tx
       .select({ id: todo.id, position: todo.position })
       .from(todo)
-      .where(ownedBy(userId, eq(todo.listId, input.listId), eq(todo.done, false)))
+      .where(editable(userId, eq(todo.listId, input.listId), eq(todo.done, false)))
       .orderBy(asc(todo.position));
 
     if (!ordered.some((row) => row.id === input.id)) return false;
@@ -255,7 +274,7 @@ export async function reorderTodo(
       await tx
         .update(todo)
         .set({ position: positionBetween(before, after), updatedAt: new Date() })
-        .where(ownedBy(userId, eq(todo.id, input.id)));
+        .where(editable(userId, eq(todo.id, input.id)));
       return true;
     } catch (error) {
       if (!(error instanceof PositionExhaustedError)) throw error;
@@ -273,7 +292,7 @@ export async function reorderTodo(
       await tx
         .update(todo)
         .set({ position, updatedAt: new Date() })
-        .where(ownedBy(userId, eq(todo.id, row.id)));
+        .where(editable(userId, eq(todo.id, row.id)));
     }
     return true;
   });
@@ -282,7 +301,7 @@ export async function reorderTodo(
 export async function deleteTodo(userId: UserId, id: string, database: TodosDatabase = db()) {
   const rows = await database
     .delete(todo)
-    .where(ownedBy(userId, eq(todo.id, id)))
+    .where(editable(userId, eq(todo.id, id)))
     .returning({ id: todo.id });
   return rows.length > 0;
 }
