@@ -2,7 +2,12 @@ import type { UserId } from '@keel/contracts/ids';
 import type { TodoFilter, TodoPriority } from '@keel/contracts/todo';
 import { db } from '@keel/db';
 import { list, type schema, todo, todoTag } from '@keel/db/schema';
-import { positionBetween } from '@keel/testbed-lists';
+import {
+  evenPositions,
+  neighboursForMove,
+  PositionExhaustedError,
+  positionBetween,
+} from '@keel/testbed-lists';
 import { and, asc, desc, eq, exists, ilike, inArray, lte, or, type SQL } from 'drizzle-orm';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 
@@ -218,6 +223,60 @@ export async function setTodoDone(
     .where(ownedBy(userId, eq(todo.id, id)))
     .returning();
   return row ?? null;
+}
+
+/**
+ * Move a todo to sit after `afterId`, or to the top of its list when that is null.
+ *
+ * Writes one row in the ordinary case. When the gap between neighbours has run out of
+ * floats the list is renumbered in the same transaction, so a reader never sees a
+ * half-reordered list.
+ *
+ * Only outstanding todos participate: completed ones sink to the bottom by the `done`
+ * sort, so dragging among them would reorder something the user cannot see the effect of.
+ */
+export async function reorderTodo(
+  userId: UserId,
+  input: { id: string; listId: string; afterId: string | null },
+  database: TodosDatabase = db(),
+) {
+  return database.transaction(async (tx) => {
+    const ordered = await tx
+      .select({ id: todo.id, position: todo.position })
+      .from(todo)
+      .where(ownedBy(userId, eq(todo.listId, input.listId), eq(todo.done, false)))
+      .orderBy(asc(todo.position));
+
+    if (!ordered.some((row) => row.id === input.id)) return false;
+
+    const { before, after } = neighboursForMove(ordered, input.id, input.afterId);
+
+    try {
+      await tx
+        .update(todo)
+        .set({ position: positionBetween(before, after), updatedAt: new Date() })
+        .where(ownedBy(userId, eq(todo.id, input.id)));
+      return true;
+    } catch (error) {
+      if (!(error instanceof PositionExhaustedError)) throw error;
+    }
+
+    const without = ordered.filter((row) => row.id !== input.id);
+    const target =
+      input.afterId === null ? 0 : without.findIndex((row) => row.id === input.afterId) + 1;
+    const resequenced = [...without.slice(0, target), { id: input.id }, ...without.slice(target)];
+    const positions = evenPositions(resequenced.length);
+
+    for (const [index, row] of resequenced.entries()) {
+      const position = positions[index];
+      if (position === undefined) throw new Error('renumber produced no position');
+      await tx
+        .update(todo)
+        .set({ position, updatedAt: new Date() })
+        .where(ownedBy(userId, eq(todo.id, row.id)));
+    }
+    return true;
+  });
 }
 
 export async function deleteTodo(userId: UserId, id: string, database: TodosDatabase = db()) {

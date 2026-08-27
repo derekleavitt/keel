@@ -8,6 +8,7 @@ import {
   getTodo,
   listDueTodos,
   listTodos,
+  reorderTodo,
   setTodoDone,
   updateTodo,
 } from './queries.ts';
@@ -204,5 +205,107 @@ describe('due dates and priority', () => {
     // No list name here on purpose — composing across features is the agenda package's
     // job, not this one's. See testbed/agenda/src/agenda.ts.
     expect(due[1]?.listId).toBe(second.id);
+  });
+});
+
+describe('reordering', () => {
+  const positions = async (listId: string) =>
+    (await listTodos(owner, listId, {}, database)).map((row) => row.title);
+
+  it('moves a todo to the top of its list', async () => {
+    for (const title of ['A', 'B', 'C']) {
+      await createTodo(owner, { listId: ownerList, title }, database);
+    }
+    const rows = await listTodos(owner, ownerList, {}, database);
+    const c = rows.find((row) => row.title === 'C');
+    if (!c) throw new Error('missing C');
+
+    await reorderTodo(owner, { id: c.id, listId: ownerList, afterId: null }, database);
+    expect(await positions(ownerList)).toEqual(['C', 'A', 'B']);
+  });
+
+  it('moves a todo one place, which a naive implementation makes a no-op', async () => {
+    for (const title of ['A', 'B', 'C']) {
+      await createTodo(owner, { listId: ownerList, title }, database);
+    }
+    const rows = await listTodos(owner, ownerList, {}, database);
+    const [a, b] = rows;
+    if (!a || !b) throw new Error('missing rows');
+
+    await reorderTodo(owner, { id: a.id, listId: ownerList, afterId: b.id }, database);
+    expect(await positions(ownerList)).toEqual(['B', 'A', 'C']);
+  });
+
+  it('writes exactly one row for an ordinary move', async () => {
+    for (const title of ['A', 'B', 'C']) {
+      await createTodo(owner, { listId: ownerList, title }, database);
+    }
+    const before = await listTodos(owner, ownerList, {}, database);
+    const c = before.find((row) => row.title === 'C');
+    if (!c) throw new Error('missing C');
+
+    await reorderTodo(owner, { id: c.id, listId: ownerList, afterId: null }, database);
+    const after = await listTodos(owner, ownerList, {}, database);
+
+    const moved = after.filter((row) => {
+      const original = before.find((b) => b.id === row.id);
+      return original && original.position !== row.position;
+    });
+    expect(moved).toHaveLength(1);
+  });
+
+  it('renumbers inside a transaction when the gap is exhausted', async () => {
+    const { todo } = await import('@keel/db/schema');
+    const { eq } = await import('drizzle-orm');
+
+    for (const title of ['A', 'B', 'C']) {
+      await createTodo(owner, { listId: ownerList, title }, database);
+    }
+    const rows = await listTodos(owner, ownerList, {}, database);
+    const [a, b, c] = rows;
+    if (!a || !b || !c) throw new Error('missing rows');
+
+    // Force adjacent doubles between A and B, so no midpoint exists.
+    await database.update(todo).set({ position: 1 }).where(eq(todo.id, a.id));
+    await database
+      .update(todo)
+      .set({ position: 1 + Number.EPSILON })
+      .where(eq(todo.id, b.id));
+
+    await reorderTodo(owner, { id: c.id, listId: ownerList, afterId: a.id }, database);
+
+    const after = await listTodos(owner, ownerList, {}, database);
+    expect(after.map((row) => row.title)).toEqual(['A', 'C', 'B']);
+
+    // Proof the renumber actually ran: pure halving from 1 could never produce this
+    // spacing. Asserting the order alone would pass even if the branch were dead.
+    const gaps = after.slice(1).map((row, index) => row.position - (after[index]?.position ?? 0));
+    expect(Math.min(...gaps)).toBeGreaterThanOrEqual(1024);
+  });
+
+  it('will not reorder another user’s todo', async () => {
+    const mine = await createTodo(owner, { listId: ownerList, title: 'Mine' }, database);
+    if (!mine) throw new Error('setup failed');
+    expect(
+      await reorderTodo(stranger, { id: mine.id, listId: ownerList, afterId: null }, database),
+    ).toBe(false);
+  });
+
+  it('leaves completed todos out of the ordering', async () => {
+    for (const title of ['A', 'B']) {
+      await createTodo(owner, { listId: ownerList, title }, database);
+    }
+    const rows = await listTodos(owner, ownerList, {}, database);
+    const a = rows[0];
+    if (!a) throw new Error('missing A');
+
+    await setTodoDone(owner, a.id, true, database);
+    // A is done, so it is not a candidate neighbour — moving B to the top is a no-op that
+    // must still succeed rather than throwing on a missing anchor.
+    const b = rows[1];
+    if (!b) throw new Error('missing B');
+    expect(await reorderTodo(owner, { id: b.id, listId: ownerList, afterId: null }, database)).toBe(
+      true,
+    );
   });
 });

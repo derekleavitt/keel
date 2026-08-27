@@ -1,7 +1,12 @@
 'use server';
 
 import { requireUserId } from '@keel/auth/session';
-import { createTodoSchema, setTodoDoneSchema, updateTodoSchema } from '@keel/contracts/todo';
+import {
+  createTodoSchema,
+  reorderTodoSchema,
+  setTodoDoneSchema,
+  updateTodoSchema,
+} from '@keel/contracts/todo';
 import { revalidatePath } from '@keel/runtime';
 
 /*
@@ -12,7 +17,7 @@ import { revalidatePath } from '@keel/runtime';
  * The `'layout'` variant invalidates the segment and everything nested under it. See
  * .orchestration/lessons/L-021.md.
  */
-import { createTodo, deleteTodo, setTodoDone, updateTodo } from './queries.ts';
+import { createTodo, deleteTodo, reorderTodo, setTodoDone, updateTodo } from './queries.ts';
 
 /** Every export is a public endpoint: no helpers, no userId arguments, parse everything. */
 export async function createTodoAction(input: unknown) {
@@ -49,6 +54,17 @@ export async function updateTodoAction(id: unknown, patch: unknown) {
 
   const row = await updateTodo(userId, id, parsed.data);
   if (!row) return { ok: false as const, error: 'Todo not found' };
+  revalidatePath('/lists', 'layout');
+  return { ok: true as const };
+}
+
+export async function reorderTodoAction(input: unknown) {
+  const userId = await requireUserId();
+  const parsed = reorderTodoSchema.safeParse(input);
+  if (!parsed.success) return { ok: false as const, error: 'Invalid move' };
+
+  const moved = await reorderTodo(userId, parsed.data);
+  if (!moved) return { ok: false as const, error: 'Todo not found' };
   revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }
