@@ -1,4 +1,5 @@
 import { requireUserOrRedirect } from '@keel/auth/session';
+import Link from 'next/link';
 import { SignOutButton } from '../sign-out-button.tsx';
 
 /**
@@ -26,9 +27,9 @@ export default async function DashboardPage() {
       </header>
 
       <div className="rounded-lg border border-line bg-surface px-5 py-4">
-        <p className="text-sm text-muted">
-          Your lists will appear here. Nothing to show yet — that is T-02.
-        </p>
+        <Link href="/lists" className="text-sm text-accent underline underline-offset-4">
+          Go to your lists
+        </Link>
       </div>
     </main>
   );

@@ -1,7 +1,18 @@
 import { getTableConfig } from 'drizzle-orm/pg-core';
 import { describe, expect, it } from 'vitest';
-import { authTables } from './auth.ts';
+import * as schemaModule from './index.ts';
 import { schema } from './index.ts';
+
+/**
+ * Every area module exports a `<area>Tables` group. Discovering them rather than listing
+ * them matters: a guard that must be edited each time a feature is added gets edited to
+ * pass rather than fixed, and then it is no longer a guard.
+ */
+const areaTables: Record<string, unknown> = Object.fromEntries(
+  Object.entries(schemaModule)
+    .filter(([name]) => name.endsWith('Tables'))
+    .flatMap(([, group]) => Object.entries(group as Record<string, unknown>)),
+);
 
 /**
  * Structural guards on the schema module.
@@ -15,7 +26,8 @@ import { schema } from './index.ts';
 
 describe('schema assembly', () => {
   it('exposes every table declared by an area module', () => {
-    for (const name of Object.keys(authTables)) {
+    expect(Object.keys(areaTables).length).toBeGreaterThan(0);
+    for (const name of Object.keys(areaTables)) {
       expect(schema, `${name} is declared but missing from the assembled schema`).toHaveProperty(
         name,
       );
@@ -31,7 +43,7 @@ describe('schema assembly', () => {
   it('assembles only from spreads, so parallel branches never edit one literal', () => {
     // Every key in `schema` must originate in an area module rather than being defined
     // inline here. Inline definitions are what made this file a three-way conflict.
-    const fromAreas = new Set(Object.keys(authTables));
+    const fromAreas = new Set(Object.keys(areaTables));
     for (const key of Object.keys(schema)) {
       expect(fromAreas.has(key), `${key} is defined inline instead of in an area module`).toBe(
         true,

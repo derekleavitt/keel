@@ -15,6 +15,13 @@
       "when": 1787862659899,
       "tag": "0001_account_issuer",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1787864494217,
+      "tag": "0002_list",
+      "breakpoints": true
     }
   ]
 }

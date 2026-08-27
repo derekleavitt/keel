@@ -16,9 +16,12 @@
  * package — a workspace dependency cycle, which Turbo hard-fails.
  */
 export * from './auth.ts';
+export * from './list.ts';
 
 import { authTables } from './auth.ts';
+import { listTables } from './list.ts';
 
 export const schema = {
   ...authTables,
+  ...listTables,
 };
