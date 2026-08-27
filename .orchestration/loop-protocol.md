@@ -27,6 +27,15 @@ mkdir .orchestration/locks/<task-id>   # atomic; EEXIST means someone else has i
 
 Set `status: claimed` in the task file.
 
+### 2b. Check the breakers
+
+```bash
+node scripts/loop-guard.mjs check <task-id>
+```
+
+Exits 2 if this task is already blocked. Do not start work on a blocked task; read the
+report in `.orchestration/blocked/` first.
+
 ### 3. Build
 
 Implement against the task's **Acceptance** list. That list is the definition of done —
@@ -39,6 +48,17 @@ Rules that do not bend:
 - Nothing throws at import time. `pnpm verify` must still pass with no `.env`.
 - Any step added to the gate must keep warm verify under ~3s. The gate fires on every
   turn; a slow gate gets switched off, and then none of this works.
+
+### 3b. Record the outcome
+
+```bash
+node scripts/loop-guard.mjs record-success <task-id>
+# or, on a red gate:
+node scripts/loop-guard.mjs record-failure <task-id> "<verify output>"
+```
+
+This is not bookkeeping. `record-failure` is what trips the circuit breakers, and it
+exits 2 when one fires. Skipping it disables the loop's only real safety system.
 
 ### 4. Validate with fresh agents
 
@@ -60,6 +80,31 @@ and say so — do not rationalise it.
 - Update `docs/architecture.md` where the phase changed it.
 - Write an ADR for any real decision, including rejected options.
 - Record field results in §12. Corrections belong in the doc, not just the commit.
+
+### 5a. Turn every mistake into a mechanism
+
+**Any mistake made or found this iteration becomes a lesson before the task can be done** —
+your own errors included, and especially those.
+
+Write `.orchestration/lessons/L-NNN.md` with an `enforced_by` naming the mechanism that
+prevents recurrence, strongest available first:
+
+| | | |
+|---|---|---|
+| `test` | cannot recur silently | strongest |
+| `lint` | cannot be expressed | |
+| `hook` | blocked at write time | |
+| `gate` | caught before the turn ends | |
+| `example` | a worked reference to pattern-match | |
+| `rule` | path-scoped, loaded when relevant | |
+| `doc` | a CLAUDE.md line | weakest |
+
+Then **build that mechanism**. `pnpm verify` fails if a lesson names an enforcement that
+does not exist, and fails once an under-enforced lesson passes its grace window.
+
+A lesson recorded as prose is worse than none: it costs context on every turn and gets
+missed anyway. Six agents read a self-contradicting comment in `schema.ts` and not one
+fixed it, because nothing made them.
 
 ### 5b. Checkpoint the state
 

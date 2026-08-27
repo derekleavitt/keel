@@ -1,21 +1,23 @@
 {
-  "name": "@keel/contracts",
+  "name": "@keel/example-notes",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./env": "./src/env.ts",
-    "./ids": "./src/ids.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@keel/contracts": "workspace:*",
+    "@keel/db": "workspace:*",
+    "drizzle-orm": "0.45.2",
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@types/node": "26.3.0",
     "typescript": "7.0.2",
     "vitest": "4.1.11"

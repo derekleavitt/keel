@@ -3,7 +3,7 @@
 _Written for someone with **no memory of previous sessions**. Everything needed to
 continue is in this file or linked from it. Regenerate with `pnpm loop:status`._
 
-Generated 2026-08-27 02:55 UTC.
+Generated 2026-08-27 03:15 UTC.
 
 ---
 
@@ -23,12 +23,31 @@ shipped and green. Phases 1-6 are being built by a loop.
 1. There are uncommitted changes:
 
 ```
-M .orchestration/loop-protocol.md
- M CLAUDE.md
+M .claude/rules/database.md
+ M .orchestration/RESUME.md
+ M .orchestration/loop-protocol.md
+ M .orchestration/status.md
+ M .orchestration/tasks/P4-04.md
+ M .orchestration/tasks/P6-01.md
+ M .orchestration/tasks/P6-03.md
  M package.json
-?? .orchestration/RESUME.md
-?? .orchestration/status.md
-?? scripts/loop-status.mjs
+ M packages/contracts/package.json
+ M packages/contracts/src/index.ts
+ M packages/db/drizzle.config.ts
+ M packages/db/package.json
+ M packages/db/src/index.ts
+ D packages/db/src/schema.ts
+ M packages/db/src/testing.test.ts
+ M packages/db/src/testing.ts
+ M pnpm-lock.yaml
+ M pnpm-workspace.yaml
+ M scripts/verify.mjs
+?? .orchestration/lessons/
+?? .orchestration/loop-state.json
+?? examples/
+?? packages/contracts/src/ids.ts
+?? packages/contracts/src/index.test.ts
+?? packages/db/src/schema/
 ```
 
 Run `pnpm verify`. If green, commit them. If red, decide whether to finish the work or run `git checkout -- .` and restart the task cleanly.
@@ -61,6 +80,6 @@ times**:
 - Phase 3: 0/3
 - Phase 4: 0/5
 - Phase 5: 0/3
-- Phase 6: 0/3
+- Phase 6: 2/3
 
 Full dashboard: `.orchestration/status.md`

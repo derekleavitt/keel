@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { schema } from './schema.ts';
+import { schema } from './schema/index.ts';
 import { createTestDatabase, seedUser } from './testing.ts';
 
 describe('test database', () => {

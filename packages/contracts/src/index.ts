@@ -1,10 +1,8 @@
 import { z } from 'zod';
+import { userIdSchema } from './ids.ts';
 
 export * from './env.ts';
-
-/** Stable identifier for a user across every package. */
-export const userIdSchema = z.string().min(1).brand<'UserId'>();
-export type UserId = z.infer<typeof userIdSchema>;
+export * from './ids.ts';
 
 /** The shape every package agrees on when it talks about a signed-in person. */
 export const sessionUserSchema = z.object({
