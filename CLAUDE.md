@@ -42,7 +42,39 @@ editing a package and seeing the effect. Do not add one.
   Reading `process.env` anywhere else is a bug.
 - **Cross-package boundaries are real.** If `apps/web` needs a vendor API, re-export
   it from the owning package rather than adding the vendor as a direct dependency.
-  See `packages/auth/src/next.ts` for the pattern.
+  See `packages/auth/src/next.ts` for the pattern. This runs both ways: a feature package
+  needing a framework API is the same smell — the owning package should expose it.
+- **Every export from a `'use server'` file is a public HTTP endpoint.** Never export
+  helpers from one, and never take `userId` as an argument. See
+  `.claude/rules/server-actions.md`.
+
+## Where things are written down
+
+Read these when they apply. Nothing else will point you at them, and agents that skipped
+them have shipped wrong code.
+
+| File | What only it tells you |
+|---|---|
+| `.claude/rules/*.md` | Per-area constraints — schema placement, server-action security, app thinness. Path-scoped, so check the ones matching files you touch. |
+| `docs/architecture.md` | Why the repo is shaped this way, and what is designed but not yet built. |
+| `docs/decomposition-log.md` | If present: the architectural decisions behind the current backlog — ordering strategy, auth enforcement, cascade directions. Read it before designing anything. |
+| `.orchestration/territories.yaml` | If present: who owns what, and which files are serialized. |
+
+## House idioms
+
+- **Run `pnpm lint:fix` before `pnpm verify`.** Most first-attempt failures are import
+  ordering and line wrapping. Fixing them by hand costs a full cycle.
+- **`noNonNullAssertion` is on**, so drizzle's `and()` returning `SQL | undefined` cannot
+  be `and(...)!`. Write `and(scope, ...narrowing) ?? scope` — the fallback is the user
+  scope rather than match-everything, which is safer as well as legal.
+- **Adding a new workspace package needs a second `pnpm install`** before typecheck can
+  resolve it. The first run reports the lockfile as up to date and skips resolution.
+- **Never import from a barrel that re-exports you.** `contracts/src/index.ts` re-exports
+  the feature modules, so importing from it inside one of them is a TDZ crash at module
+  eval — not a lint error.
+- **Session access is `@keel/auth/session`** — `requireUser()`, `requireUserId()`,
+  `currentUser()`. Do not write your own, and do not add `next` to a feature package to
+  get at `headers()`.
 
 ## Commands
 
@@ -59,6 +91,7 @@ pnpm lint:fix        # format and autofix
 2. `tsconfig.json` extending `../../tsconfig.base.json`
 3. `typecheck` and `test:unit` scripts (Turbo discovers them automatically)
 4. Add to `transpilePackages` in `apps/web/next.config.ts` if the app consumes it
+5. Run `pnpm install` a second time so the workspace link resolves
 
 ## Status
 

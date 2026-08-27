@@ -135,6 +135,21 @@ billing:
   read_only: [pkg:db, pkg:ui]
 ```
 
+Ownership comes in three kinds, not two. **This is a correction from field results** —
+see §12. The original model had only `owns` and `read_only`, and that produced worse
+architecture in three of three trials.
+
+- **Owned** — one territory writes it. Guarded at write time by a `PreToolUse` hook.
+- **Shared service** — packages like `auth` and `ui` that any territory may *extend
+  additively*. A helper every feature needs belongs here, written once. Strict
+  `read_only` on these forces every agent to reimplement the same thing in its own
+  package, which is how the duplicate-shape circuit breaker gets tripped by the design
+  itself.
+- **Serialized** — files every feature must touch: `db/src/schema.ts`, the contracts
+  barrel, `next.config.ts`, the lockfile. These need an *ordering rule*, not a permission
+  bit. `may_edit` granted to three territories with no merge strategy is just a deferred
+  conflict.
+
 A `PreToolUse` hook checks every write against the acting agent's territory — killing
 cross-territory conflicts *before they exist* rather than at merge, when they have become
 semantic rather than textual.
@@ -220,6 +235,49 @@ Supporting MCP servers worth wiring in: **Context7** (live library docs — the 
 for hallucinated APIs during an unsupervised run), **Playwright** (agents verifying their
 own work), **GitHub** (the integrator role needs PR automation), **Postgres** (real
 schema state rather than inferred).
+
+## 12. Field results
+
+Three cold agents built three features of a todo app in parallel worktrees against
+Phase 0. No coordination, no pre-serialized schema work. What it proved:
+
+**Retrieval is the bottleneck, not documentation.** All three named the same unblocking
+read — `docs/decomposition-log.md`, a file linked from nowhere, found by listing the
+tree. One put it exactly: *"CLAUDE.md told me how to build; the decomposition log told me
+what to build."* Conventions were well documented and well followed. What agents could
+not find was **which files exist**. That is `graph_context`'s job, and it is the
+strongest argument in this project for Phase 1.
+
+**The collision prediction was exact.** First branch merged clean; the other two
+conflicted on `schema.ts`, the contracts barrel, `next.config.ts`, `apps/web/package.json`,
+the lockfile and `drizzle/meta/*`. Predicting the set was easy. The design's error was
+treating it as a *permissions* problem when it is a *serialization* problem.
+
+**The §9 duplicate-shape breaker fired at Phase 0.** All three agents needed a session
+helper, all three found `packages/auth` read-only, all three wrote their own, and all
+three pulled `next` into a supposedly framework-agnostic package to do it. A circuit
+breaker designed for Phase 6 was needed on day one — and the territory model caused the
+condition it was meant to catch.
+
+**The gate held.** Three independent agents, 236 tests, zero weakened checks, zero
+suppressions, zero deleted tests. Cold builds verified with no `.env`. Lazy
+initialisation survived contact with three implementers who had never seen the repo.
+
+**Decomposition is ~40% judgment.** Hand-decomposing the PRD produced 8 mechanical
+decisions and 5 judgment calls — and the judgment calls were all architectural
+constraints everything downstream inherits. Phase 5 should therefore *detect* judgment
+calls and surface them as explicit choices, decomposing only the mechanical remainder.
+That is a much simpler and safer tool than "PRD in, backlog out".
+
+### Defects this surfaced in Phase 0, since fixed
+
+Feature tables staying in `schema.ts` but assembled from per-area spreads, so parallel
+branches append distinct lines; a committed baseline migration, without which every
+branch generated a conflicting one; `requireUser()` in `@keel/auth/session`; a
+`server-actions.md` rule covering the fact that every export from a `'use server'` module
+is a public HTTP endpoint; a PGlite test database so the security-critical query layer is
+executable rather than merely typechecked; and a "where things are written down" section
+in CLAUDE.md, since undiscoverable docs were the single most repeated failure.
 
 ## 11. Roadmap
 
