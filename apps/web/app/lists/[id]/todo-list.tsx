@@ -6,6 +6,7 @@ import { Button } from '@keel/ui';
 import { useRouter } from 'next/navigation';
 import { useOptimistic, useRef, useState, useTransition } from 'react';
 import { TodoDetail } from './todo-detail.tsx';
+import { type TagChip, TodoTags } from './todo-tags.tsx';
 
 type Row = {
   id: string;
@@ -13,9 +14,18 @@ type Row = {
   done: boolean;
   dueDate: string | null;
   priority: TodoPriority;
+  tags: TagChip[];
 };
 
-export function TodoList({ listId, rows }: { listId: string; rows: Row[] }) {
+export function TodoList({
+  listId,
+  rows,
+  allTags,
+}: {
+  listId: string;
+  rows: Row[];
+  allTags: TagChip[];
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +98,7 @@ export function TodoList({ listId, rows }: { listId: string; rows: Row[] }) {
         <>
           <ul className="flex flex-col gap-px overflow-hidden rounded-lg border border-line bg-line">
             {ordered.map((row) => (
-              <li key={row.id} className="flex items-center gap-3 bg-surface px-4 py-3">
+              <li key={row.id} className="flex items-start gap-3 bg-surface px-4 py-3">
                 <input
                   type="checkbox"
                   checked={row.done}
@@ -103,7 +113,7 @@ export function TodoList({ listId, rows }: { listId: string; rows: Row[] }) {
                       router.refresh();
                     });
                   }}
-                  className="size-4 accent-accent"
+                  className="mt-1 size-4 accent-accent"
                 />
                 <div className="flex flex-1 flex-col gap-2">
                   <span className={row.done ? 'text-sm text-muted line-through' : 'text-sm'}>
@@ -114,6 +124,13 @@ export function TodoList({ listId, rows }: { listId: string; rows: Row[] }) {
                     title={row.title}
                     dueDate={row.dueDate}
                     priority={row.priority}
+                  />
+                  <TodoTags
+                    todoId={row.id}
+                    todoTitle={row.title}
+                    tags={row.tags}
+                    suggestions={allTags}
+                    onChanged={() => router.refresh()}
                   />
                 </div>
                 <Button

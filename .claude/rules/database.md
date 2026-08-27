@@ -21,12 +21,52 @@ paths: ["packages/db/**"]
 
 ## Migrations are generated at integration time, not on your branch
 
-**Do not run `pnpm db:generate` on a feature branch.** Change the schema only. The
-integrator generates one migration after merging.
+**On a feature branch: do not run `pnpm db:generate`.** Change the schema only.
 
-Three parallel branches each generating a correct delta still collide on
-`meta/_journal.json` and on identically-numbered snapshots. A branch containing new files
-under `drizzle/` will be rejected. See `.orchestration/lessons/L-005.md`.
+**On `main`, you are the integrator: generate it.** That is the one place migrations are
+created, and the distinction is the whole rule — three parallel branches each generating a
+correct delta still collide on `meta/_journal.json` and on identically-numbered snapshots.
+See `.orchestration/lessons/L-005.md`.
+
+> **The commit history contradicts this and it is not a licence.** T-02, T-03 and T-04
+> each landed a migration beside their feature, because that work happened directly on
+> `main` where generating is correct. Nothing in those commits says so, so from a branch
+> the history reads as "committing migrations is normal". It is not. A cold agent found
+> this exact ambiguity and nearly followed the precedent over the rule.
+
+### Testing schema changes on a branch
+
+Your new tables exist in `schema` and in no migration, so `createTestDatabase()` cannot see
+them — which would make a table's own tests unreachable on the branch that wrote it.
+
+`@keel/db/testing` closes that: `applyPendingSchema()` derives the delta between the newest
+committed snapshot and the live schema using the same `drizzle-kit` machinery as
+`db:generate`, and applies it to the test database only. Nothing is written to `drizzle/`.
+It no-ops when everything is already migrated.
+
+You do not need to call it — `createTestDatabase()` does. See
+`.orchestration/lessons/L-019.md`.
+
+### Running the app on a branch
+
+`pnpm db:migrate` applies committed migrations only, so your development database has no
+tables for schema you have not migrated — the unit suite passes while every page touching
+them returns a 500, and the default gate skips e2e so nothing says so.
+
+```bash
+pnpm db:sync     # push the current schema straight to the dev database
+```
+
+**Local development only.** It writes no migration and can drop columns to match; never
+point it at anything you care about. When the work merges, the integrator generates the
+real migration on `main`.
+
+**Your tables are still testable before that migration exists.** `createTestDatabase()`
+derives the pending delta from `schema` and applies it, so a branch tests its new tables
+against real Postgres with real foreign keys and real cascades. You do not need to commit
+a migration, and you must not hand-write `CREATE TABLE` in a test to work around it — that
+asserts against DDL the test invented rather than against the schema. See
+`.orchestration/lessons/L-017.md`.
 
 ## Where feature tables go
 

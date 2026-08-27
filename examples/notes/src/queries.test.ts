@@ -17,8 +17,18 @@ let stranger: UserId;
 
 beforeEach(async () => {
   database = await createTestDatabase();
-  // The example keeps its table local, so create it here. A real feature's table would
-  // arrive through the committed migrations that createTestDatabase() already applies.
+  // ┌───────────────────────────────────────────────────────────────────────────┐
+  // │ DO NOT COPY THIS BLOCK.                                                   │
+  // │                                                                           │
+  // │ A real feature's table lives in packages/db/src/schema/<feature>.ts and    │
+  // │ arrives through migrations, which createTestDatabase() applies for you —   │
+  // │ including ones not yet generated, via applyPendingSchema().                │
+  // │                                                                           │
+  // │ This example keeps its table local so a cloned template does not inherit   │
+  // │ a stray example_note table, which is why it must create it by hand. A      │
+  // │ cascade or constraint test written against DDL the test itself invented    │
+  // │ proves nothing about your schema.                                          │
+  // └───────────────────────────────────────────────────────────────────────────┘
   await database.execute(sql`
     CREATE TABLE example_note (
       id text PRIMARY KEY,
