@@ -14,6 +14,19 @@ paths: ["apps/web/**"]
 - Anything reading the environment or the database must be dynamic, never prerendered.
 - Styling comes from `@keel/ui` tokens. Do not introduce a second source of colour.
 
+## Revalidate the segment you are actually on
+
+`revalidatePath('/lists')` does **not** invalidate `/lists/[id]`. A mutation on a nested
+dynamic route that revalidates only the parent leaves the client serving a cached payload,
+which looks exactly like a write that never happened — while the database is perfectly
+correct.
+
+Use `revalidatePath('/lists', 'layout')` to invalidate a segment and everything under it.
+
+If a change appears not to persist, **query the database before theorising about the
+mechanism**. See `.orchestration/lessons/L-021.md`, where two plausible concurrency
+theories were both wrong and one `psql` query settled it.
+
 ## Controls backed by server state need an optimistic path
 
 A checkbox or toggle written as `checked={row.done}` with an `onChange` calling a server

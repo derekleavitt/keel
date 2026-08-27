@@ -69,16 +69,14 @@ test('combining status and priority narrows further', async ({ page }) => {
 
   for (const title of ['Done urgent', 'Open urgent']) {
     await page.getByLabel(`Priority for ${title}`).selectOption('high');
-    // Wait for each write to settle before starting the next. Overlapping mutations can
-    // lose one — see .orchestration/lessons/L-021.md. This is a real limitation being
-    // worked around, not test flakiness.
-    await expect(page.getByLabel(`Priority for ${title}`)).toHaveValue('high');
   }
 
   await page.getByLabel('Mark Done urgent done').check();
   await expect(page.getByText('1 outstanding')).toBeVisible();
-  await page.reload();
-  await expect(page.getByText('1 outstanding')).toBeVisible();
+
+  // Submitting the filter is a full navigation, so it must not race the write it is
+  // about to filter on. An enabled control means the mutation queue has drained.
+  await expect(page.getByLabel(/^Mark Done urgent/)).toBeEnabled();
 
   await page.getByLabel('Filter by status').selectOption('false');
   await page.getByLabel('Filter by priority').selectOption('high');
