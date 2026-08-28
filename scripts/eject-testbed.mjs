@@ -106,6 +106,61 @@ function pruneDependencies(relative) {
 
 pruneDependencies('apps/web/package.json');
 
+/**
+ * Replace files that referenced the testbed with platform-only versions.
+ *
+ * These are shipped as real files under `scripts/eject-templates/` rather than generated as
+ * strings, so they are reviewable in a diff and type-checked by the repository they belong to
+ * — a template emitted from a string literal is the one file nothing ever checks.
+ *
+ * The realtime route's `authorize()` deliberately returns nothing after this: which channels
+ * exist is a question about your resources, and refusing everything is the safe answer while
+ * the answer is unknown.
+ */
+const templates = path.join(root, 'scripts', 'eject-templates');
+for (const relative of [
+  'app/dashboard/page.tsx',
+  'app/api/jobs/run/route.ts',
+  'app/api/realtime/route.ts',
+]) {
+  const from = path.join(templates, relative);
+  const to = path.join(root, 'apps/web', relative);
+  if (fs.existsSync(from)) fs.copyFileSync(from, to);
+}
+git(['rm', '-r', '-q', '--ignore-unmatch', 'scripts/eject-templates']);
+
+/**
+ * Strip links to routes that no longer exist.
+ *
+ * `typedRoutes` turns every one of these into a compile error rather than a 404 at runtime,
+ * which is why this is a fixed list and not a guess — the build says immediately if one was
+ * missed.
+ */
+function dropLinkBlocks(relative, hrefs) {
+  const file = path.join(root, relative);
+  if (!fs.existsSync(file)) return;
+
+  const lines = fs.readFileSync(file, 'utf8').split('\n');
+  const kept = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index] ?? '';
+    if (!hrefs.some((href) => line.includes(`href="${href}"`))) {
+      kept.push(line);
+      continue;
+    }
+    // A self-closing `<Link … />` is one element; an open tag runs to its `</Link>` or `</a>`.
+    if (!/\/>\s*$/.test(line)) {
+      while (index < lines.length && !/<\/(Link|a)>/.test(lines[index] ?? '')) index += 1;
+    }
+    // Drop the opening line of a multi-line element too.
+    while (kept.length > 0 && /<(Link|a)\s*$/.test(kept.at(-1) ?? '')) kept.pop();
+  }
+  fs.writeFileSync(file, kept.join('\n'));
+}
+
+dropLinkBlocks('apps/web/app/admin/layout.tsx', ['/lists']);
+dropLinkBlocks('apps/web/app/organizations/page.tsx', ['/lists']);
+
 /** Remove a line matching `pattern` from a file. */
 function dropLines(relative, pattern) {
   const file = path.join(root, relative);
@@ -130,9 +185,12 @@ dropLines('packages/contracts/src/index.ts', /'\.\/(todo|list|tag|recurrence)\.t
 
 console.log('\nRemoved the testbed and its schema, routes, contracts and specs.\n');
 console.log('Now, in order:');
-console.log('  1. pnpm install            # relink the workspace');
-console.log('  2. review apps/web/app     # the dashboard and nav still link to what is gone');
-console.log('  3. pnpm db:reset && pnpm db:migrate');
-console.log('  4. pnpm verify\n');
-console.log('Step 2 is yours on purpose. What the landing page and navigation should say is');
-console.log('a decision about your product, and a script guessing at it would be wrong.\n');
+console.log('  1. pnpm install');
+console.log('  2. pnpm db:reset && pnpm db:migrate   # the todo tables are gone');
+console.log('  3. pnpm verify\n');
+console.log('The gate should be green. What is left is authentication, organizations and');
+console.log('scoping, billing and plan limits, the job queue, email, storage, audit logging,');
+console.log('rate limiting, realtime, search, the admin surface — and no application.\n');
+console.log('Implement authorize() in app/api/realtime/route.ts when you have resources to');
+console.log('subscribe to; it refuses everything until then, which is the safe default.\n');
+console.log('Copy examples/notes for the shape of a feature package.\n');
