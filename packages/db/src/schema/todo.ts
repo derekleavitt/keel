@@ -64,10 +64,10 @@ export const todo = pgTable(
      */
     priority: todoPriority('priority').default('none').notNull(),
     position: doublePrecision('position').notNull(),
-    createdAt: timestamp('created_at')
+    createdAt: timestamp('created_at', { withTimezone: true })
       .$defaultFn(() => new Date())
       .notNull(),
-    updatedAt: timestamp('updated_at')
+    updatedAt: timestamp('updated_at', { withTimezone: true })
       .$defaultFn(() => new Date())
       .notNull(),
   },

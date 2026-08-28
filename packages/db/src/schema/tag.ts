@@ -45,10 +45,10 @@ export const tag = pgTable(
       .references(() => user.id, { onDelete: 'cascade' }),
     name: text('name').notNull(),
     colour: text('colour'),
-    createdAt: timestamp('created_at')
+    createdAt: timestamp('created_at', { withTimezone: true })
       .$defaultFn(() => new Date())
       .notNull(),
-    updatedAt: timestamp('updated_at')
+    updatedAt: timestamp('updated_at', { withTimezone: true })
       .$defaultFn(() => new Date())
       .notNull(),
   },
@@ -74,7 +74,7 @@ export const todoTag = pgTable(
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
-    createdAt: timestamp('created_at')
+    createdAt: timestamp('created_at', { withTimezone: true })
       .$defaultFn(() => new Date())
       .notNull(),
   },

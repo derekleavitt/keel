@@ -24,7 +24,7 @@ export const job = pgTable(
     payload: jsonb('payload').notNull(),
     status: jobStatus('status').default('pending').notNull(),
     /** Not before this instant. Backoff moves it forward; scheduling sets it ahead. */
-    runAt: timestamp('run_at').notNull(),
+    runAt: timestamp('run_at', { withTimezone: true }).notNull(),
     attempts: integer('attempts').default(0).notNull(),
     maxAttempts: integer('max_attempts').default(5).notNull(),
     lastError: text('last_error'),
@@ -34,10 +34,10 @@ export const job = pgTable(
      * place, or to retry after a partial failure.
      */
     uniqueKey: text('unique_key').unique(),
-    createdAt: timestamp('created_at')
+    createdAt: timestamp('created_at', { withTimezone: true })
       .$defaultFn(() => new Date())
       .notNull(),
-    updatedAt: timestamp('updated_at')
+    updatedAt: timestamp('updated_at', { withTimezone: true })
       .$defaultFn(() => new Date())
       .notNull(),
   },

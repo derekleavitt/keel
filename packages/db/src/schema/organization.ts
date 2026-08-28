@@ -25,10 +25,10 @@ export const organization = pgTable('organization', {
    * always has somewhere to work.
    */
   personal: text('personal_for_user_id').references(() => user.id, { onDelete: 'cascade' }),
-  createdAt: timestamp('created_at')
+  createdAt: timestamp('created_at', { withTimezone: true })
     .$defaultFn(() => new Date())
     .notNull(),
-  updatedAt: timestamp('updated_at')
+  updatedAt: timestamp('updated_at', { withTimezone: true })
     .$defaultFn(() => new Date())
     .notNull(),
 });
@@ -43,7 +43,7 @@ export const membership = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
     role: membershipRole('role').notNull(),
-    createdAt: timestamp('created_at')
+    createdAt: timestamp('created_at', { withTimezone: true })
       .$defaultFn(() => new Date())
       .notNull(),
   },

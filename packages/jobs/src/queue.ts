@@ -131,13 +131,10 @@ export async function runJobs(
   /**
    * The comparison instant is a parameter rather than SQL `now()`.
    *
-   * `run_at` is `timestamp` without time zone and `now()` is `timestamptz`, so Postgres
-   * reconciles them through the server's zone — and a job stored in UTC is never "due"
-   * unless the server happens to run in UTC. It fails silently and completely: the queue
-   * claims nothing at all.
-   *
-   * Passing a `Date` makes both sides the same type, and makes "now" controllable in a
-   * test. The underlying schema issue is repo-wide; see K-007.
+   * This began as a workaround for a zone-less `run_at`, which K-007 has since fixed — but
+   * it is kept, because passing the instant makes "now" controllable: a test can run a job
+   * scheduled for tomorrow without waiting, and a backfill can drain a queue as of a past
+   * moment. A workaround that turned out to be the better design.
    */
   const asOf = options.asOf ?? new Date();
   const byKind = new Map(handlers.map((handler) => [handler.kind, handler]));
