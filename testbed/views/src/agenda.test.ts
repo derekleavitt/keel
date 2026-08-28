@@ -125,3 +125,22 @@ describe('buildAgenda', () => {
     );
   });
 });
+
+describe('asOf', () => {
+  it('describes the day it is asked about, not the day it runs', async () => {
+    await createTodo(owner, { listId: work, title: 'On the day', dueDate: '2026-06-15' }, database);
+    await createTodo(owner, { listId: work, title: 'Day before', dueDate: '2026-06-14' }, database);
+
+    // A scheduled job retried the next morning must still produce the digest it was
+    // scheduled for, not a new one where everything has become overdue.
+    const agenda = await buildAgenda(owner, UTC, database, '2026-06-15');
+
+    expect(agenda.dueToday.map((e) => e.title)).toEqual(['On the day']);
+    expect(agenda.overdue.map((e) => e.title)).toEqual(['Day before']);
+  });
+
+  it('hides what is not yet due on that day', async () => {
+    await createTodo(owner, { listId: work, title: 'Later', dueDate: '2026-06-20' }, database);
+    expect((await buildAgenda(owner, UTC, database, '2026-06-15')).empty).toBe(true);
+  });
+});
