@@ -73,9 +73,14 @@ For: **staleness did happen twice, and neither was caught.**
 - `docs/platform-readiness.md` had four rows built long ago and never marked done. Harmless,
   but it is exactly the drift the prediction describes.
 
-Neither would have been caught by signature hashing, which detects *code changing under a
-document*. Both were documents describing a state that had changed, with no code edit to
-trigger a check.
+A third, found while verifying the cold clone: **the README still said "Phase 0 of 6"** after
+twenty-four features, listed a TypeScript version reverted at Phase 0.1, and described as
+"designed but not yet implemented" the very things this review is dropping. It is the first
+thing a new user reads and the last thing anybody edited. See [[L-048]].
+
+None of the three would have been caught by signature hashing, which detects *code changing
+under a document*. All three were documents describing a state of the world that had moved,
+with no code edit to trigger any check.
 
 **Recommendation: delete P2-01, P2-02 and P2-04; keep the idea behind P2-03 in a narrower
 form.** What the evidence supports is not generated docs or hashing — it is a check that a
