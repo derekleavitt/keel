@@ -28,6 +28,9 @@ export default async function ListsPage() {
           <a href="/settings/webhooks" className="text-sm text-accent underline underline-offset-4">
             Webhooks
           </a>
+          <a href="/settings/billing" className="text-sm text-accent underline underline-offset-4">
+            Billing
+          </a>
           <SignOutButton />
         </div>
       </header>

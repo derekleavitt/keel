@@ -1,8 +1,9 @@
 import { audit } from '@keel/audit';
+import { checkLimit, LimitExceededError } from '@keel/billing';
 import type { Scope } from '@keel/contracts/ids';
 import { db, type KeelDatabase } from '@keel/db';
 import { list } from '@keel/db/schema';
-import { and, asc, eq, type SQL } from 'drizzle-orm';
+import { and, asc, count, eq, type SQL } from 'drizzle-orm';
 
 import { ownedByUser, visibleVia } from './access.ts';
 import {
@@ -46,6 +47,23 @@ export async function createList(
   input: { name: string; colour?: string | null },
   database: ListsDatabase = db(),
 ) {
+  /*
+   * The plan limit is enforced **here**, in the query layer, not in the action.
+   *
+   * Every entry point funnels through this function — the web UI, the public API, a future
+   * import job — so the limit cannot be bypassed by calling a different endpoint, which is
+   * exactly the failure the task warned about. The same argument as the audit log in
+   * [[L-028]]: a cross-cutting rule belongs at the layer that owns the resource, because the
+   * layer that owns the request grows a new entry point every other task.
+   */
+  const [{ n: owned } = { n: 0 }] = await database
+    .select({ n: count() })
+    .from(list)
+    .where(eq(list.organizationId, scope.organizationId));
+
+  const allowance = await checkLimit(scope.organizationId, 'lists', Number(owned), database);
+  if (!allowance.allowed) throw new LimitExceededError('lists', allowance);
+
   const existing = await listLists(scope, database);
   const last = existing.at(-1)?.position ?? null;
 

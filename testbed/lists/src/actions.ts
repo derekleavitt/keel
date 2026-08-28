@@ -1,5 +1,6 @@
 'use server';
 
+import { LimitExceededError } from '@keel/billing';
 import {
   createListSchema,
   reorderListSchema,
@@ -34,7 +35,23 @@ export async function createListAction(input: unknown) {
   if (!parsed.success)
     return { ok: false as const, error: parsed.error.issues[0]?.message ?? 'Invalid' };
 
-  await createList(scope, parsed.data);
+  try {
+    await createList(scope, parsed.data);
+  } catch (error) {
+    /*
+     * A plan limit is a fact about the account, not a bug: turn it into a message the user
+     * can act on, with the numbers in it. Everything else re-throws — swallowing unknown
+     * errors here would turn a real failure into a silent no-op.
+     */
+    if (error instanceof LimitExceededError) {
+      return {
+        ok: false as const,
+        error: `Your ${error.check.plan} plan allows ${error.check.limit} lists. Upgrade to add more.`,
+      };
+    }
+    throw error;
+  }
+
   revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }

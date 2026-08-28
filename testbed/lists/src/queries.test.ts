@@ -1,6 +1,9 @@
 import { listActivity } from '@keel/audit';
+import { entitlements, LimitExceededError, PLANS } from '@keel/billing';
 import type { Scope } from '@keel/contracts/ids';
+import { subscription } from '@keel/db/schema';
 import { createTestDatabase, seedScope } from '@keel/db/testing';
+import { eq } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { POSITION_STEP } from './position.ts';
 import { createList, deleteList, getList, listLists, reorderList, updateList } from './queries.ts';
@@ -176,5 +179,61 @@ describe('activity', () => {
 
     // The stranger's feed is empty: nothing happened, so nothing is recorded.
     expect(await feed(stranger)).toEqual([]);
+  });
+});
+
+describe('plan limits', () => {
+  /*
+   * Enforced in the query layer, which is what makes it unbypassable: the web UI, the public
+   * API and any future import all reach `createList`, so there is no endpoint to call
+   * instead. Same argument as the audit log — see .orchestration/lessons/L-028.md.
+   */
+  it('refuses a list beyond the plan allowance', async () => {
+    for (let n = 0; n < PLANS.free.lists; n += 1) {
+      await createList(owner, { name: `List ${n}` }, database);
+    }
+
+    await expect(createList(owner, { name: 'One too many' }, database)).rejects.toBeInstanceOf(
+      LimitExceededError,
+    );
+  });
+
+  it('counts each tenant separately', async () => {
+    for (let n = 0; n < PLANS.free.lists; n += 1) {
+      await createList(owner, { name: `List ${n}` }, database);
+    }
+    // A neighbour filling their allowance has no effect on this one.
+    await expect(createList(stranger, { name: 'Theirs' }, database)).resolves.toBeTruthy();
+  });
+
+  it('allows it again once the plan is raised', async () => {
+    for (let n = 0; n < PLANS.free.lists; n += 1) {
+      await createList(owner, { name: `List ${n}` }, database);
+    }
+    await expect(createList(owner, { name: 'Blocked' }, database)).rejects.toThrow();
+
+    await entitlements(owner.organizationId, database);
+    await database
+      .update(subscription)
+      .set({ plan: 'team' })
+      .where(eq(subscription.organizationId, owner.organizationId));
+
+    await expect(createList(owner, { name: 'Now fine' }, database)).resolves.toBeTruthy();
+  });
+
+  /** The error carries the numbers, so the message can tell the user what to do. */
+  it('reports the plan and the allowance it hit', async () => {
+    for (let n = 0; n < PLANS.free.lists; n += 1) {
+      await createList(owner, { name: `List ${n}` }, database);
+    }
+
+    await createList(owner, { name: 'Nope' }, database).catch((error: unknown) => {
+      expect(error).toBeInstanceOf(LimitExceededError);
+      expect((error as LimitExceededError).check).toMatchObject({
+        plan: 'free',
+        limit: PLANS.free.lists,
+        used: PLANS.free.lists,
+      });
+    });
   });
 });

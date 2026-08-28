@@ -1,0 +1,53 @@
+/**
+ * What each plan allows.
+ *
+ * Data, in one place, rather than conditionals spread through the code. Two properties fall
+ * out of that: a limit check is a lookup rather than a branch, and adding a plan is an entry
+ * here rather than an audit of every call site.
+ *
+ * `null` means unlimited, and is deliberately not a very large number. `Infinity` does not
+ * survive JSON, and a sentinel like 999_999 eventually shows a customer "999,999 lists
+ * remaining" — which is how you learn it was a sentinel.
+ */
+export const PLANS = {
+  free: {
+    label: 'Free',
+    seats: 1,
+    lists: 3,
+    storageBytes: 10 * 1024 * 1024,
+  },
+  team: {
+    label: 'Team',
+    seats: 10,
+    lists: 100,
+    storageBytes: 1024 * 1024 * 1024,
+  },
+  business: {
+    label: 'Business',
+    seats: null,
+    lists: null,
+    storageBytes: 50 * 1024 * 1024 * 1024,
+  },
+} as const;
+
+export type PlanName = keyof typeof PLANS;
+export type LimitName = 'seats' | 'lists' | 'storageBytes';
+
+export const PLAN_NAMES = Object.keys(PLANS) as PlanName[];
+
+export function limitFor(plan: PlanName, limit: LimitName): number | null {
+  return PLANS[plan][limit];
+}
+
+/**
+ * Whether a subscription's status still entitles the tenant to its plan.
+ *
+ * `past_due` deliberately still does. Cutting a customer off the moment a card expires
+ * loses their data access over a billing detail they can usually fix in a minute, and the
+ * provider is already retrying the charge. `canceled` is the state that drops entitlements
+ * — and it drops them to `free` rather than to nothing, so a former customer can still read
+ * and export what they wrote.
+ */
+export function effectivePlan(plan: PlanName, status: string): PlanName {
+  return status === 'canceled' ? 'free' : plan;
+}
