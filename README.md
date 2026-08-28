@@ -1,250 +1,188 @@
 # Keel
 
-**Most boilerplates optimise the first hour. Keel optimises the ten-thousandth run.**
+**Most starters optimise the first hour. Keel is about the ten-thousandth run.**
 
-The first hour is easy — any starter gets you a running app. What breaks a large codebase is
-what happens months later, when nobody remembers why a constraint exists, the documentation
-quietly stopped being true, and the agent working on it is a fresh context window that has
-never seen this repository before.
+Hour one is easy — any scaffold gets you a running app. What decides whether a large platform
+survives is what happens two years in, when nobody remembers why a constraint exists, the
+documentation quietly stopped being true, and the thing about to change it has never seen the
+codebase before.
 
-Keel is built so that agent can spin up, know exactly where to start, and keep going
-effectively — on run one and on run ten thousand.
-
-> **Agents are ephemeral. Context is durable.**
->
-> You cannot keep an agent informed. You can make the *repository* informative, and make the
-> things that matter impossible to violate rather than merely written down.
+This document is about that problem, not about a feature list.
 
 ---
 
-## Two layers
+## The permanent condition
 
-**A substrate** — the platform underneath your product. Multi-tenancy, auth, billing, jobs, a
-public API, rate limiting. Built, tested, and shaped so the important rules are enforced by
-the compiler and the build rather than by an agent's good intentions.
+If you are building a large platform primarily with coding agents, your workers have three
+properties that will not change:
 
-**A memory layer** — how the repository remembers *why*. Decisions, hard-won lessons, and the
-constraints that came out of them, each attached to a mechanism that fails the build if it is
-violated. Not a wiki nobody reads.
+**They forget everything.** Every session begins from nothing. There is no tenure, no "I
+remember when we tried that," no colleague to ask.
 
-Together they answer one question: **how do you safely reach run ten thousand on any web
-platform build-out?**
+**They see a fraction.** A context window holds a slice of a large codebase, and never the
+whole. Whatever the agent knows about your system, it learned in the last few minutes, from
+whatever it happened to open.
 
-## What actually breaks at scale, and the answer here
+**Eventually there are many at once.** The value of agent labour is parallelism. That means
+concurrent writers with no shared memory and no ability to coordinate by talking.
 
-| At run 10,000 | Keel's answer |
-|---|---|
-| Nobody remembers why a constraint exists, so it gets violated | Constraints are enforced by module resolution, branded types and the gate — there is no comment that suppresses them |
-| Documentation drifted and an agent acts on it | Conventions live in code and in path-scoped rules that load only when relevant files are touched |
-| The same mistake is made again by a different agent | A lesson ledger where every entry names an enforcement mechanism — and the gate fails if that mechanism doesn't exist |
-| "Done" is a judgement call, so work gets undone | `pnpm verify` on the `Stop` hook: an agent **cannot finish a turn** while the repo is broken |
-| An agent burns its context rediscovering the repo | A 132-line entry point, and a vertical slice to copy |
-| Parallel agents collide | One-file-per-feature schema layout, a task ledger, and territories |
+These are not limitations to engineer around. They are the operating conditions. So the
+question is not "how do we help an agent understand the codebase?" — it is:
 
-## Quick start
+> **What must be true of a codebase for it to be safely extensible by workers who will never
+> understand it?**
 
-```bash
-pnpm install
-pnpm db:up        # Postgres in Docker, writes .env with generated secrets
-pnpm db:migrate
-pnpm dev
-```
+## The thesis
 
-No account anywhere, no `.env` to hand-edit, no Postgres to install.
+> A codebase where **correctness is local** and **verification is structural**, so that an
+> unbounded number of forgetful, partially-sighted workers can extend it safely, in parallel,
+> indefinitely.
 
-A demo todo application ships with it so nothing is hypothetical — it is what the substrate
-was built against. Replace it with yours when ready:
+The measure of success is not velocity in week one. It is whether **feature ten thousand is as
+safe to add as feature one** — and whether the tenth agent to touch a subsystem is as
+trustworthy as the first.
 
-```bash
-pnpm eject:testbed --confirm
-```
+## Five problems
 
-The demo goes; the platform and the test suite stay green.
+### 1. Correctness is global, and it needs to be local
 
-## Build your first feature
+In most codebases, changing X safely requires knowing about Y and Z. A human accumulates that
+map over years. An agent has minutes and 3% of the repo.
 
-Copy [`examples/notes`](./examples/notes) — a complete, commented vertical slice.
+The consequence is not that agents write bad code — it is that they write *locally plausible*
+code with non-local consequences. A query that forgets a tenant filter. A migration that
+breaks a deploy because the old version is still running. A cascade that deletes something
+three tables away.
 
-**1. Tables** in `packages/db/src/schema/<feature>.ts` — a new file, so parallel work never
-conflicts. Two lines in `schema/index.ts`: one re-export, one spread. Then `pnpm db:generate
-&& pnpm db:migrate`.
+**Why the obvious fix fails.** "Document the invariants" doesn't work, because the agent
+doesn't know to look — the whole problem is that it doesn't know what it doesn't know.
 
-**2. Validation** in `packages/contracts/src/<feature>.ts`. Every layer agrees on these shapes.
+**The shape of a solution:** make the invariant impossible to violate *from inside the slice
+the agent can see.* If tenancy is a branded type that every query signature demands, an agent
+that has read none of your documentation still cannot write an unscoped query — the compiler
+refuses. The knowledge lives in the type, not in a person.
 
-**3. The package** — `packages/<feature>/package.json` with
-`"exports": { ".": "./src/index.ts" }`, a tsconfig extending the base, and `typecheck` /
-`test:unit` scripts. Run `pnpm install` twice.
+### 2. Verification is the bottleneck, and self-graded work doesn't count
 
-**4. Queries** in `src/queries.ts`. Every one takes a `Scope` first:
+Generation is cheap now. Knowing whether the output is right is the constraint, and a human
+reviewing everything is the thing that doesn't scale.
 
-```ts
-export async function listProjects(scope: Scope, database: KeelDatabase = db()) {
-  return database.select().from(project).where(visibleVia(project.id, scope));
-}
-```
+The trap: "the agent writes tests" is self-graded homework. An agent that can weaken a check
+to make it pass will eventually do so, not from malice but because a failing check looks like
+an obstacle rather than information.
 
-`Scope` is branded, so forgetting tenancy is a **compile error**, not a data leak. That is the
-substrate doing the remembering for you — in a year, an agent that has never read a line of
-your documentation still cannot write an unscoped query.
+**The shape of a solution:** verification the agent cannot satisfy by weakening it. Types,
+module resolution, database constraints — checks where the only way through is to be correct.
+And a **hard stop**: a gate wired into the agent's termination path, so finishing a turn on a
+broken repository is not possible rather than merely discouraged.
 
-**5. Server actions** in `src/actions.ts`. Every export from a `'use server'` file is a public
-endpoint: never take a `userId` argument, never export helpers, validate everything.
+Two properties matter as much as the gate's existence. It must be **fast** — a slow gate gets
+disabled, so speed is a correctness property. And it must be **the same gate CI runs**, or the
+agent and the pipeline will disagree about reality.
 
-**6. Tests** — `createTestDatabase()` gives you PGlite with your migrations applied. Real
-constraints, real cascades, fast enough to run per test.
+### 3. Entropy from locally-reasonable choices
 
-**7. Routes** in `apps/web/app/`. Thin: compose packages, don't put logic here.
+Session 1 puts authorization here. Session 400 puts it there. Neither is wrong. Together they
+are mud, and no single commit is the culprit.
 
-**8. `pnpm verify`.**
+Human teams solve this with culture, review, and people who have been there a while. Agents
+have none of those. Convention held only by habit does not survive contributors with no
+memory.
 
-## The substrate
+**The shape of a solution:** conventions that are mechanically enforced, and *discoverable at
+the moment of writing* rather than at review. Two mechanisms, and both are needed:
 
-Already built, tested, and yours to build on:
+- **Structural** — if a package doesn't declare a dependency, importing it fails the build.
+  There is no comment that suppresses that. Physical enforcement beats procedural politeness.
+- **Contextual** — constraints scoped to paths, so the rules about schema design surface when
+  something touches the schema, and stay out of the way otherwise. Context spent reading
+  irrelevant instructions is context not spent on the problem.
 
-| | |
-|---|---|
-| **Auth** | Sign-up, sign-in, sessions — Better Auth, wired |
-| **Multi-tenancy** | Organizations, membership, invitations; `Scope` on every query |
-| **Sharing** | Per-resource grants that compose into your own queries |
-| **API keys** | Split-token, hashed, revocable, per-key rate limits |
-| **Admin roles** | Platform staff as a *separate axis* from tenant roles |
-| **Background jobs** | Postgres queue: transactional enqueue, backoff, dead letter |
-| **Scheduled work** | Recurrence rules, DST-correct, idempotent generation |
-| **Billing** | Plans, limits enforced in the query layer, idempotent provider webhooks |
-| **Rate limiting** | Shared across instances, sliding window |
-| **Public API** | Versioned `/api/v1`, documented error codes |
-| **Outbound webhooks** | Signed, retried, replayable, SSRF-guarded |
-| **Realtime** | Server-sent events, re-authorized while open, degrades to polling |
-| **Full-text search** | Postgres FTS with an index that cannot fall behind |
-| **Audit log** | Recorded at the query layer, so every entry point is covered |
-| **Storage & email** | Driver interfaces; email writes to disk in development |
+### 4. The "why" evaporates — and this is the hard one
 
-## The memory layer
+A codebase is a pile of decisions. Why is this column nullable? Why doesn't this cascade? Why
+is this apparently redundant check here?
 
-This is what makes run ten thousand survivable, and it is a tool you use — not a folder to
-read once.
+A human asks someone. An agent has nobody, so it does the reasonable thing: it tidies up
+something load-bearing, and the failure appears three months later somewhere else.
 
-**[CLAUDE.md](./CLAUDE.md) is the entry point.** Short on purpose: context spent reading
-instructions is context not spent on the problem.
+**Why the obvious fix fails.** Writing it down is necessary and nowhere near sufficient. Nobody
+reads fifty documents, least of all a worker optimising for the task in front of it. Worse,
+written knowledge decays — and a document that is confidently wrong is more dangerous than one
+that doesn't exist.
 
-**Rules load on demand.** `.claude/rules/*.md` carry `paths:` frontmatter, so schema rules
-appear when an agent touches `packages/db/**` and stay out of the way otherwise. Adding a rule
-is adding a file.
+**The shape of a solution has two halves, and the second is the unsolved one:**
 
-**The gate is the definition of done.** `pnpm verify` runs lint, typecheck, unit tests, the
-lesson ledger and the build, wired to the Claude Code `Stop` hook. ~40 seconds with the browser
-suite. Speed is a correctness property — a gate slow enough to annoy is a gate someone
-disables.
+**Storage that cannot lie.** Every recorded lesson names the mechanism that prevents its
+recurrence — a test, a lint rule, a type — and the build fails if that mechanism is absent.
+A lesson claiming enforcement it does not have is worse than one claiming none. This turns a
+knowledge base into something with an integrity constraint, and gives a promotion ladder worth
+following: *a test beats a lint rule beats a hook beats a gate beats an example beats a
+written rule beats a note.* "We should remember to…" is the last resort, not the first.
 
-**Lessons are how the repo stops repeating itself.** When your agent hits a real bug, it writes
-`.orchestration/lessons/L-NNN.md` naming the mechanism that prevents recurrence:
+**Retrieval at the point of need.** Storage without retrieval is a filing cabinet. The
+open question is how an arriving agent loads exactly the relevant *why* — the three decisions
+that bear on what it is about to change — without reading everything. Path-scoped rules are a
+crude first version. A richer index over decisions, contracts and lessons is the obvious next
+step and is genuinely unsolved.
 
-```yaml
----
-id: L-049
-enforced_by: test          # test > lint > hook > gate > example > rule > doc
-enforcement_ref: packages/projects/src/queries.test.ts
----
-# A soft delete that the default query forgets is a resurrection bug
-```
+### 5. Collisions, physical and semantic
 
-The gate **fails if that mechanism doesn't exist**. A lesson claiming enforcement it doesn't
-have is worse than one claiming none, so the ledger cannot decay into good intentions. It
-ships with worked examples from building the substrate; `pnpm eject:testbed` archives the ones
-whose tests leave with the demo.
+Parallel agents fail in two different ways, and they need different answers.
 
-**Decisions are recorded where the next agent will look.** `.orchestration/journal/` holds why
-things are the way they are — the reasoning that would otherwise evaporate with the context
-window that had it.
+**Physical** — two agents editing the same file. Solvable by layout: if every feature owns its
+own schema file and its own package, concurrent work rarely touches the same lines. This is
+duller and more effective than a locking protocol.
 
-## Running agents on it
+**Semantic** — agent B builds on a contract agent A just changed. This one is nastier, because
+both agents are individually correct and the result still doesn't work. The mitigations are
+narrow interfaces that fail loudly when broken, and serialising the genuinely shared surfaces
+rather than pretending everything is parallelisable.
 
-**A task backlog** in `.orchestration/tasks/` — one file per unit of work, with acceptance
-criteria and a status an agent claims.
+## What follows
 
-**A loop protocol** in `.orchestration/loop-protocol.md`: pick a task, build it, record the
-friction, close it. `pnpm loop:status` reconstructs where a crashed session stopped from task
-frontmatter, locks and git history — derived state is regenerated, never stored, so it can
-never describe someone else's machine.
+The design principles that fall out of the above, in rough order of leverage:
 
-**Circuit breakers** in `scripts/loop-guard.mjs` halt on identical repeated failures, too many
-iterations on one task, or consecutive red runs.
+1. **Make invariants structural.** If it matters, it should be enforced by the compiler, the
+   module system, or the database — not by prose an agent may never read.
+2. **Make done executable.** A definition of done that is a judgement call will be judged
+   generously by something that wants to finish.
+3. **Keep the entry point short.** Context spent on instructions is context not spent on the
+   problem. Scope the rest to the paths where it applies.
+4. **Record why, with an integrity constraint.** Knowledge that can silently become false is a
+   liability, not an asset.
+5. **Prefer layout to protocol.** A file arrangement that makes collisions rare beats a
+   mechanism that resolves them.
+6. **Ship worked examples, not instructions.** A vertical slice that compiles teaches shape
+   faster than a page describing it — and it cannot drift, because it is in the build.
 
-**For parallel agents**, the structural work is done — schema is one file per feature so two
-agents adding tables never touch the same file, and package boundaries fail the build rather
-than merging badly. Territories and atomic claims are specified in `.orchestration/` and are
-the least-proven part of this; see [Known gaps](#known-gaps).
+## What this is not
 
-## Everyday commands
+**It is not a feature list.** Prebuilt subsystems earn their place by *establishing
+invariants* — multi-tenancy exists so that every query signature demands a scope, and the
+compiler then enforces that for code nobody has written yet. Read as a time-saver, the same
+code is just another starter.
 
-```bash
-pnpm dev              # all dev servers
-pnpm verify           # the gate
-pnpm verify unit      # iterate on one step
-KEEL_E2E=1 pnpm verify   # include the browser suite
-pnpm lint:fix         # run before verify
-pnpm db:generate      # migration from schema changes
-pnpm db:migrate
-pnpm db:studio        # browse the database
-pnpm admin:grant you@example.com
-```
+**It is not a promise of autonomy.** None of this makes an agent trustworthy. It makes a
+codebase where an untrustworthy agent does less damage and gets corrected faster.
 
-## Configuration
+**It is not finished thinking.** Retrieval of the *why* is genuinely open. So is proving that
+parallel agents hold up under real load rather than in principle.
 
-`pnpm db:up` writes a working `.env`. Beyond local:
+## Open questions
 
-| Variable | Required | Notes |
-|---|---|---|
-| `DATABASE_URL` | yes | Postgres |
-| `BETTER_AUTH_SECRET` | yes | ≥32 characters; rotating signs everyone out |
-| `BETTER_AUTH_URL` | yes | Your public origin |
-| `JOBS_SECRET` | to run jobs | The worker refuses everything without it |
-| `BILLING_WEBHOOK_SECRET` | with a provider | See [docs/billing.md](./docs/billing.md) |
+The honest list of what this thesis does not yet answer:
 
-New variables go in `packages/contracts/src/env.ts` **and** `.env.example`. Reading
-`process.env` anywhere else is a bug.
-
-`pnpm verify` passes with no `.env` at all — environment, database and auth are lazily
-initialised, so tests and builds never need secrets.
-
-## Deploying
-
-```bash
-docker build -t your-app .
-docker run -p 3000:3000 -e DATABASE_URL=… -e BETTER_AUTH_SECRET=… your-app
-```
-
-Migrations are a **release step**, never on boot — every replica would migrate at once during
-a rolling deploy. Point a scheduler at `POST /api/jobs/run` every minute, or background work
-silently never happens. Detail in [docs/deployment.md](./docs/deployment.md).
-
-## Stack
-
-Next.js 16 · React 19 · TypeScript 5.9 strict · pnpm + Turborepo · Postgres + Drizzle ·
-Better Auth · Tailwind 4 · Biome · Vitest + PGlite · Playwright
-
-Internal packages export TypeScript source directly — no build step between editing a package
-and seeing the effect.
-
-## Reference
-
-| | |
-|---|---|
-| [CLAUDE.md](./CLAUDE.md) | Agent entry point — read first |
-| [examples/notes](./examples/notes) | The vertical slice to copy |
-| [docs/architecture.md](./docs/architecture.md) | Why the repo is shaped this way |
-| [docs/api.md](./docs/api.md) · [docs/billing.md](./docs/billing.md) · [docs/deployment.md](./docs/deployment.md) | Platform surfaces |
-| [.claude/rules/](./.claude/rules/) | Constraints your agent loads on demand |
-| [.orchestration/](./.orchestration/) | Tasks, lessons, loop protocol |
-
-## Known gaps
-
-- **Parallel agents are designed, not proven.** The structural groundwork is in place;
-  territories and atomic claims are specified but everything here was built one agent at a
-  time. This is the least-tested part of the memory layer.
-- **No payment provider is wired.** Plans, limits and webhook reconciliation are built and
-  tested against a stub; connecting a real one is four functions and your keys.
-- **Hosting is documented but untested** — the container is verified locally only.
+- **How does an agent find the three decisions that matter** to the change it is making,
+  without reading everything? Path-scoping is a crude proxy for relevance.
+- **How is a decision retired?** A lesson that was true and no longer is has the same shape as
+  one that is still true.
+- **What is the right unit of parallelism?** A feature, a package, a file? Too coarse wastes
+  the labour; too fine reintroduces semantic collisions.
+- **Can documentation staleness be made structural**, the way lesson enforcement is — a check
+  that fails when a document describes a world that has moved?
+- **Does any of this hold at ten agents?** Everything above is reasoned from the properties of
+  the workers. Reasoning is not evidence.
 
 ## License
 
