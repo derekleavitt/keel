@@ -141,6 +141,13 @@
       "when": 1787928352007,
       "tag": "0019_billing",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1787929796463,
+      "tag": "0020_rate_limit",
+      "breakpoints": true
     }
   ]
 }

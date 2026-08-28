@@ -86,7 +86,19 @@ export async function forgetActiveOrganization(): Promise<void> {
  * row, which is what makes removing someone from an organization revoke their keys for it
  * immediately, with nothing to invalidate.
  */
-export async function scopeFromRequest(request: Request): Promise<Scope | null> {
+export interface RequestIdentity {
+  scope: Scope;
+  /**
+   * The API key this request presented, when it presented one.
+   *
+   * Returned rather than discarded because a rate limiter needs to count per credential, and
+   * re-authenticating in the limiter to find out would both double the work and risk the two
+   * disagreeing about who is calling.
+   */
+  apiKeyId: string | null;
+}
+
+export async function identifyRequest(request: Request): Promise<RequestIdentity | null> {
   const header = request.headers.get('authorization');
 
   if (header?.startsWith('Bearer ')) {
@@ -94,16 +106,21 @@ export async function scopeFromRequest(request: Request): Promise<Scope | null> 
     if (!identity) return null;
     // Strict: no fallback. A key whose organization is no longer available is dead, not
     // redirected somewhere else.
-    return scopeFor(identity.userId, identity.organizationId);
+    const scope = await scopeFor(identity.userId, identity.organizationId);
+    return scope ? { scope, apiKeyId: identity.keyId } : null;
   }
 
   // No key presented: fall back to the session cookie, so the same endpoints are usable
   // from the app itself and from a browser devtools console during development.
   try {
-    return await requireScope();
+    return { scope: await requireScope(), apiKeyId: null };
   } catch {
     return null;
   }
+}
+
+export async function scopeFromRequest(request: Request): Promise<Scope | null> {
+  return (await identifyRequest(request))?.scope ?? null;
 }
 
 /**

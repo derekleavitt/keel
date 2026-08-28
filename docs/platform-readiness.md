@@ -38,8 +38,8 @@ repeated finding in this repo's history.
 
 | Capability | Driver | Why any platform needs it |
 |---|---|---|
-| Sharing and per-resource permissions | T-10 | Ownership alone stops working the moment two people touch one thing |
-| Organizations / multi-tenancy | T-11 | Nearly every platform is multi-tenant, and retrofitting it is brutal |
+| Sharing and per-resource permissions | T-10 · **done** | Ownership alone stops working the moment two people touch one thing. `visibleVia`/`editableVia` composed, never re-derived |
+| Organizations / multi-tenancy | T-11 · **done** | Nearly every platform is multi-tenant, and retrofitting it is brutal. No signature accepts a user without a tenant |
 | Roles and an admin surface | T-18 · **done** | Someone always needs to see across tenants. Platform staff is a separate axis from membership — see [[L-037]] |
 | Audit log | T-14 · **done** | Required the first time a customer asks "who changed this". Recorded in the query layer, so every entry point is covered — see [[L-028]] |
 
@@ -49,13 +49,13 @@ repeated finding in this repo's history.
 |---|---|---|
 | Background jobs / queue | T-12 · **done at T-16** | Anything slow must leave the request path. Marked done at T-12 while its claim query had never once run against the production driver; T-16 was the first HTTP drain and it threw twice. See [[L-033]] |
 | Scheduled / recurring work | T-17 · **done** | Reminders, digests, cleanup, billing runs. Generic date engine in `@keel/scheduling`; idempotent by constraint — see [[L-035]] |
-| Transactional email | T-12 | Password resets alone make this mandatory |
+| Transactional email | T-12 · **done** | Password resets alone make this mandatory. Writes to `.keel/mail/` in development; never sends |
 
 ## Data and content
 
 | Capability | Driver | Why any platform needs it |
 |---|---|---|
-| File upload and storage | T-13 | Avatars, attachments, imports, exports |
+| File upload and storage | T-13 · **done** | Avatars, attachments, imports, exports. Driver interface; blobs deliberately outlive rows |
 | Full-text search | T-19 · **done** | Every list view outgrows a `LIKE` query. Per-feature sources merged by a composition layer; index is a generated column, so it cannot lag |
 | Real-time updates | T-20 · **done** | Two tabs disagreeing is a bug users report. SSE over a Postgres change log; re-authorized while open — see [[L-042]] |
 
@@ -65,7 +65,7 @@ repeated finding in this repo's history.
 |---|---|---|
 | Public API with keys | T-15 · **done** | Session auth does not work for machines. `/api/v1`, split-token keys, revocable — see [[L-031]] |
 | Outbound webhooks | T-16 · **done** | Integration is table stakes. Two-stage dispatch, signed, replayable, SSRF-guarded |
-| Rate limiting | T-22 | The first abusive client arrives sooner than expected |
+| Rate limiting | T-22 · **done** | The first abusive client arrives sooner than expected. Postgres-backed so it is shared across instances; sliding window — see [[L-045]] |
 | Payments and subscriptions | T-21 · **done (no vendor wired)** | Limits enforced in the query layer; webhooks idempotent and order-safe. Wiring a provider needs the operator's own keys — see `docs/billing.md` |
 
 ## What "done" has to mean
@@ -86,7 +86,7 @@ wire format, the framework's caching, and the driver that actually ships. See
 
 | Capability | Driver | Why any platform needs it |
 |---|---|---|
-| Structured logging and error reporting | T-12 | A background job failing silently is the classic outage |
+| Structured logging and error reporting | T-12 · **done** | A background job failing silently is the classic outage. JSON events on stderr, searchable by `event` |
 | Observability of the gate itself | built | `pnpm loop:status` |
 | Deployment story | T-21 | Vercel-first, Docker-ready, documented and exercised |
 

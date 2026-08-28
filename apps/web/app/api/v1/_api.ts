@@ -1,7 +1,8 @@
-import { LimitExceededError } from '@keel/billing';
+import { entitlements, LimitExceededError, requestsPerMinuteFor } from '@keel/billing';
 import type { Scope } from '@keel/contracts/ids';
 import type { Parser } from '@keel/contracts/parse';
-import { scopeFromRequest } from '@keel/testbed-orgs/scope';
+import { consume, rateLimitHeaders } from '@keel/rate-limit';
+import { identifyRequest } from '@keel/testbed-orgs/scope';
 
 /**
  * The shared shape of every v1 endpoint.
@@ -32,11 +33,62 @@ export const fail = (status: number, code: string, message: string) =>
  * place that decides what an unauthenticated API request looks like — and so adding a
  * third credential type later touches one function.
  */
+/**
+ * The client's address, as far as it can be known.
+ *
+ * `x-forwarded-for` is set by the proxy in front of the app — and, absent a proxy, by the
+ * client itself. **The operator has to guarantee their proxy overwrites it**, because an
+ * attacker who can choose the header can choose a fresh identity per request and has no
+ * limit at all. Documented in `docs/api.md`; there is no way for the application to tell the
+ * difference on its own.
+ *
+ * The left-most entry is the original client; everything after it was appended by hops.
+ */
+function clientAddress(request: Request): string {
+  const forwarded = request.headers.get('x-forwarded-for');
+  const first = forwarded?.split(',')[0]?.trim();
+  return first || request.headers.get('x-real-ip') || 'unknown';
+}
+
+/** One minute, the window every published limit is expressed in. */
+const WINDOW_MS = 60_000;
+
+/**
+ * Requests limited by address, applied **before** authentication.
+ *
+ * Before, on purpose: a limit that only counts successful requests does nothing about the
+ * case worth worrying about — someone working through a list of stolen or guessed keys, every
+ * attempt of which fails auth and would otherwise be free.
+ *
+ * Deliberately generous, because an address is a blunt identifier. Everyone in one office
+ * shares a NAT and therefore shares this budget, so a tight limit here locks out a building
+ * to slow down one script. The per-key limit below is where the real accounting happens; this
+ * exists to stop the unauthenticated flood, not to price the API.
+ *
+ * The first version was 120/minute and the browser suite tripped it against itself — every
+ * test runs from one address. That is the same arithmetic a customer's office does.
+ */
+const ANONYMOUS_POLICY = { limit: 600, windowMs: WINDOW_MS };
+
 export async function withScope(
   request: Request,
   handler: (scope: Scope) => Promise<Response>,
 ): Promise<Response> {
-  const scope = await scopeFromRequest(request);
+  const address = await consume(`api:ip:${clientAddress(request)}`, ANONYMOUS_POLICY);
+  if (!address.allowed) {
+    return new Response(
+      JSON.stringify({
+        error: { code: 'rate_limited', message: 'Too many requests from this address.' },
+      } satisfies ApiError),
+      {
+        status: 429,
+        headers: { 'content-type': 'application/json', ...rateLimitHeaders(address) },
+      },
+    );
+  }
+
+  const identity = await identifyRequest(request);
+  const scope = identity?.scope ?? null;
   if (!scope) {
     return new Response(
       JSON.stringify({
@@ -53,8 +105,47 @@ export async function withScope(
     );
   }
 
+  /*
+   * The per-caller limit, keyed by the API key when there is one and by the organization
+   * otherwise. Keying by *key* matters: revoking a leaked key should also revoke the traffic
+   * it was generating, and an organization-wide key would let one runaway integration consume
+   * the whole tenant's allowance.
+   */
+  const { plan } = await entitlements(scope.organizationId);
+  const caller = await consume(
+    identity?.apiKeyId ? `api:key:${identity.apiKeyId}` : `api:org:${scope.organizationId}`,
+    { limit: requestsPerMinuteFor(plan), windowMs: WINDOW_MS },
+  );
+
+  if (!caller.allowed) {
+    return new Response(
+      JSON.stringify({
+        error: {
+          code: 'rate_limited',
+          message: `Your ${plan} plan allows ${requestsPerMinuteFor(plan)} requests per minute.`,
+        },
+      } satisfies ApiError),
+      {
+        status: 429,
+        headers: { 'content-type': 'application/json', ...rateLimitHeaders(caller) },
+      },
+    );
+  }
+
+  /*
+   * The allowance is reported on **every** response, not only when refused. A client that can
+   * only learn its remaining quota by being refused has to make the request you wanted it not
+   * to make.
+   */
+  const withHeaders = (response: Response) => {
+    for (const [name, value] of Object.entries(rateLimitHeaders(caller))) {
+      response.headers.set(name, value);
+    }
+    return response;
+  };
+
   try {
-    return await handler(scope);
+    return withHeaders(await handler(scope));
   } catch (caught) {
     /*
      * A plan limit is a fact about the account, not a server fault. Left to the generic

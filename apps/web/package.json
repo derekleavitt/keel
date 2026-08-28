@@ -18,6 +18,7 @@
     "@keel/db": "workspace:*",
     "@keel/email": "workspace:*",
     "@keel/jobs": "workspace:*",
+    "@keel/rate-limit": "workspace:*",
     "@keel/realtime": "workspace:*",
     "@keel/storage": "workspace:*",
     "@keel/testbed-admin": "workspace:*",

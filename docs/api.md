@@ -39,6 +39,7 @@ Branch on `code`; show `message`. Codes are stable, messages are not.
 | 400 | `missing_parameter` | A required query parameter was absent. |
 | 401 | `unauthenticated` | No key, bad key, or revoked key. |
 | 402 | `limit_exceeded` | The account's plan does not allow another of these. Retrying will not help. |
+| 429 | `rate_limited` | Too many requests. `Retry-After` says how long to wait. |
 | 404 | `not_found` | No such resource **or** not yours. Deliberately the same answer — see below. |
 | 405 | `method_not_allowed` | Wrong verb for this path. |
 | 500 | `internal_error` | Logged server-side. The message is never echoed to the client. |
@@ -46,6 +47,48 @@ Branch on `code`; show `message`. Codes are stable, messages are not.
 **404 rather than 403 for another tenant's data.** A `403` confirms the id exists, which
 turns the API into an enumeration oracle. The query layer returns nothing for "not yours"
 and for "no such thing" alike, so this is the natural answer rather than a special case.
+
+## Rate limits
+
+Every response carries the allowance, not only the refusals:
+
+```
+RateLimit-Limit: 60
+RateLimit-Remaining: 57
+RateLimit-Reset: 43
+```
+
+A refusal adds `Retry-After` in seconds. Reporting continuously means a well-behaved client
+can slow down *before* hitting anything — one that can only learn its quota by being refused
+has to make the request you wanted it not to make.
+
+| Plan | Requests / minute |
+|---|---|
+| Free | 60 |
+| Team | 600 |
+| Business | 6,000 |
+
+Two limits apply, in this order:
+
+1. **Per address**, 600/minute, checked **before authentication**. This is what meters someone
+   working through stolen or guessed keys — attempts that fail auth would otherwise be free.
+   Deliberately generous: everyone in one office shares a NAT and therefore shares this
+   budget.
+2. **Per API key**, at the plan's rate. Keyed by *key* rather than by organization, so
+   revoking a leaked key also stops the traffic it was generating, and one runaway integration
+   cannot consume a whole tenant's allowance.
+
+A refused attempt still counts. A client that ignores a 429 and keeps going stays blocked
+rather than getting a fresh allowance when the window rolls.
+
+> **Operators: your proxy must overwrite `X-Forwarded-For`.** The address limit reads it, and
+> absent a proxy the *client* sets it — so anyone who can choose the header can choose a fresh
+> identity per request and has no address limit at all. Vercel, Fly and Cloudflare all
+> overwrite it; a bare `next start` behind nothing does not. The application cannot tell the
+> difference, which is why this is stated here rather than checked.
+
+Counters live in Postgres, so the limit is shared across every instance. A per-process counter
+is not a rate limit — it is the limit divided by however many instances happen to be running.
 
 ## Endpoints
 
