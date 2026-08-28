@@ -1,12 +1,10 @@
 {
-  "name": "@keel/testbed-orgs",
+  "name": "@keel/admin",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./actions": "./src/actions.ts",
-    "./scope": "./src/scope.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -14,12 +12,13 @@
   },
   "dependencies": {
     "@keel/auth": "workspace:*",
-    "@keel/billing": "workspace:*",
     "@keel/contracts": "workspace:*",
     "@keel/db": "workspace:*",
-    "@keel/runtime": "workspace:*",
-    "drizzle-orm": "0.45.2",
-    "zod": "4.4.3"
+    "@keel/jobs": "workspace:*",
+    "@keel/audit": "workspace:*",
+    "@keel/webhooks": "workspace:*",
+    "@keel/organizations": "workspace:*",
+    "drizzle-orm": "0.45.2"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",

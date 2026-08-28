@@ -1,6 +1,6 @@
+import { listOrganizations } from '@keel/admin';
 import { listAdminActions } from '@keel/auth/platform';
 import { deadJobs } from '@keel/jobs';
-import { listOrganizations } from '@keel/testbed-admin';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';

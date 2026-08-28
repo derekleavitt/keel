@@ -40,7 +40,7 @@ export { revalidatePath, revalidateTag } from 'next/cache';
  * `@keel/auth/session`; this is for what they have most recently chosen. And nothing read
  * here is trusted — a cookie is attacker-controlled, so the value must be validated
  * against the database before it scopes anything. See `scopeFor()` in
- * `@keel/testbed-orgs`, which returns null rather than trusting the id it was handed.
+ * `@keel/organizations`, which returns null rather than trusting the id it was handed.
  */
 export async function readPreference(name: string): Promise<string | undefined> {
   const { cookies } = await import('next/headers');

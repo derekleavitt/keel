@@ -1,7 +1,7 @@
 'use server';
 
+import { requireScope } from '@keel/organizations/scope';
 import { revalidatePath } from '@keel/runtime';
-import { requireScope } from '@keel/testbed-orgs/scope';
 import { deleteAttachment, type UploadFailure, uploadAttachment } from './queries.ts';
 
 const MESSAGES: Record<UploadFailure, string> = {

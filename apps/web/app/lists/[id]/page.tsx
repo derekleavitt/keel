@@ -1,9 +1,9 @@
 import { listActivity } from '@keel/audit';
 import { isTodoFilterNarrowing, type TodoFilter, todoFilterSchema } from '@keel/contracts/todo';
+import { requireScopeOrRedirect } from '@keel/organizations/scope';
 import { currentCursor } from '@keel/realtime';
 import { listAttachments } from '@keel/testbed-attachments';
 import { getList, listShares, roleOnList } from '@keel/testbed-lists';
-import { requireScopeOrRedirect } from '@keel/testbed-orgs/scope';
 import { listTags, listTagsForTodos } from '@keel/testbed-tags';
 import { listRules, listTodos } from '@keel/testbed-todos';
 import Link from 'next/link';

@@ -35,6 +35,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@keel/admin':
+        specifier: workspace:*
+        version: link:../../packages/admin
       '@keel/audit':
         specifier: workspace:*
         version: link:../../packages/audit
@@ -56,6 +59,9 @@ importers:
       '@keel/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs
+      '@keel/organizations':
+        specifier: workspace:*
+        version: link:../../packages/organizations
       '@keel/rate-limit':
         specifier: workspace:*
         version: link:../../packages/rate-limit
@@ -65,18 +71,12 @@ importers:
       '@keel/storage':
         specifier: workspace:*
         version: link:../../packages/storage
-      '@keel/testbed-admin':
-        specifier: workspace:*
-        version: link:../../testbed/admin
       '@keel/testbed-attachments':
         specifier: workspace:*
         version: link:../../testbed/attachments
       '@keel/testbed-lists':
         specifier: workspace:*
         version: link:../../testbed/lists
-      '@keel/testbed-orgs':
-        specifier: workspace:*
-        version: link:../../testbed/orgs
       '@keel/testbed-reminders':
         specifier: workspace:*
         version: link:../../testbed/reminders
@@ -147,6 +147,46 @@ importers:
       zod:
         specifier: 4.4.3
         version: 4.4.3
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: 0.5.8
+        version: 0.5.8
+      '@types/node':
+        specifier: 26.3.0
+        version: 26.3.0
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.11
+        version: 4.1.11(@types/node@26.3.0)(vite@8.2.2(@types/node@26.3.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12))
+
+  packages/admin:
+    dependencies:
+      '@keel/audit':
+        specifier: workspace:*
+        version: link:../audit
+      '@keel/auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@keel/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@keel/db':
+        specifier: workspace:*
+        version: link:../db
+      '@keel/jobs':
+        specifier: workspace:*
+        version: link:../jobs
+      '@keel/organizations':
+        specifier: workspace:*
+        version: link:../organizations
+      '@keel/webhooks':
+        specifier: workspace:*
+        version: link:../webhooks
+      drizzle-orm:
+        specifier: 0.45.2
+        version: 0.45.2(@electric-sql/pglite@0.5.8)(kysely@0.29.5)(postgres@3.4.9)
     devDependencies:
       '@electric-sql/pglite':
         specifier: 0.5.8
@@ -307,6 +347,43 @@ importers:
       '@keel/db':
         specifier: workspace:*
         version: link:../db
+      drizzle-orm:
+        specifier: 0.45.2
+        version: 0.45.2(@electric-sql/pglite@0.5.8)(kysely@0.29.5)(postgres@3.4.9)
+      zod:
+        specifier: 4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: 0.5.8
+        version: 0.5.8
+      '@types/node':
+        specifier: 26.3.0
+        version: 26.3.0
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.11
+        version: 4.1.11(@types/node@26.3.0)(vite@8.2.2(@types/node@26.3.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12))
+
+  packages/organizations:
+    dependencies:
+      '@keel/auth':
+        specifier: workspace:*
+        version: link:../auth
+      '@keel/billing':
+        specifier: workspace:*
+        version: link:../billing
+      '@keel/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@keel/db':
+        specifier: workspace:*
+        version: link:../db
+      '@keel/runtime':
+        specifier: workspace:*
+        version: link:../runtime
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2(@electric-sql/pglite@0.5.8)(kysely@0.29.5)(postgres@3.4.9)
@@ -495,46 +572,6 @@ importers:
         specifier: 4.1.11
         version: 4.1.11(@types/node@26.3.0)(vite@8.2.2(@types/node@26.3.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12))
 
-  testbed/admin:
-    dependencies:
-      '@keel/audit':
-        specifier: workspace:*
-        version: link:../../packages/audit
-      '@keel/auth':
-        specifier: workspace:*
-        version: link:../../packages/auth
-      '@keel/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
-      '@keel/db':
-        specifier: workspace:*
-        version: link:../../packages/db
-      '@keel/jobs':
-        specifier: workspace:*
-        version: link:../../packages/jobs
-      '@keel/testbed-orgs':
-        specifier: workspace:*
-        version: link:../orgs
-      '@keel/webhooks':
-        specifier: workspace:*
-        version: link:../../packages/webhooks
-      drizzle-orm:
-        specifier: 0.45.2
-        version: 0.45.2(@electric-sql/pglite@0.5.8)(kysely@0.29.5)(postgres@3.4.9)
-    devDependencies:
-      '@electric-sql/pglite':
-        specifier: 0.5.8
-        version: 0.5.8
-      '@types/node':
-        specifier: 26.3.0
-        version: 26.3.0
-      typescript:
-        specifier: 5.9.3
-        version: 5.9.3
-      vitest:
-        specifier: 4.1.11
-        version: 4.1.11(@types/node@26.3.0)(vite@8.2.2(@types/node@26.3.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12))
-
   testbed/attachments:
     dependencies:
       '@keel/contracts':
@@ -546,6 +583,9 @@ importers:
       '@keel/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs
+      '@keel/organizations':
+        specifier: workspace:*
+        version: link:../../packages/organizations
       '@keel/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
@@ -555,9 +595,6 @@ importers:
       '@keel/testbed-lists':
         specifier: workspace:*
         version: link:../lists
-      '@keel/testbed-orgs':
-        specifier: workspace:*
-        version: link:../orgs
       '@keel/testbed-todos':
         specifier: workspace:*
         version: link:../todos
@@ -595,52 +632,15 @@ importers:
       '@keel/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@keel/organizations':
+        specifier: workspace:*
+        version: link:../../packages/organizations
       '@keel/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
       '@keel/search':
         specifier: workspace:*
         version: link:../../packages/search
-      '@keel/testbed-orgs':
-        specifier: workspace:*
-        version: link:../orgs
-      drizzle-orm:
-        specifier: 0.45.2
-        version: 0.45.2(@electric-sql/pglite@0.5.8)(kysely@0.29.5)(postgres@3.4.9)
-      zod:
-        specifier: 4.4.3
-        version: 4.4.3
-    devDependencies:
-      '@electric-sql/pglite':
-        specifier: 0.5.8
-        version: 0.5.8
-      '@types/node':
-        specifier: 26.3.0
-        version: 26.3.0
-      typescript:
-        specifier: 5.9.3
-        version: 5.9.3
-      vitest:
-        specifier: 4.1.11
-        version: 4.1.11(@types/node@26.3.0)(vite@8.2.2(@types/node@26.3.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12))
-
-  testbed/orgs:
-    dependencies:
-      '@keel/auth':
-        specifier: workspace:*
-        version: link:../../packages/auth
-      '@keel/billing':
-        specifier: workspace:*
-        version: link:../../packages/billing
-      '@keel/contracts':
-        specifier: workspace:*
-        version: link:../../packages/contracts
-      '@keel/db':
-        specifier: workspace:*
-        version: link:../../packages/db
-      '@keel/runtime':
-        specifier: workspace:*
-        version: link:../../packages/runtime
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2(@electric-sql/pglite@0.5.8)(kysely@0.29.5)(postgres@3.4.9)
@@ -675,12 +675,12 @@ importers:
       '@keel/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs
+      '@keel/organizations':
+        specifier: workspace:*
+        version: link:../../packages/organizations
       '@keel/testbed-lists':
         specifier: workspace:*
         version: link:../lists
-      '@keel/testbed-orgs':
-        specifier: workspace:*
-        version: link:../orgs
       '@keel/testbed-tags':
         specifier: workspace:*
         version: link:../tags
@@ -715,12 +715,12 @@ importers:
       '@keel/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@keel/organizations':
+        specifier: workspace:*
+        version: link:../../packages/organizations
       '@keel/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
-      '@keel/testbed-orgs':
-        specifier: workspace:*
-        version: link:../orgs
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2(@electric-sql/pglite@0.5.8)(kysely@0.29.5)(postgres@3.4.9)
@@ -761,6 +761,9 @@ importers:
       '@keel/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs
+      '@keel/organizations':
+        specifier: workspace:*
+        version: link:../../packages/organizations
       '@keel/realtime':
         specifier: workspace:*
         version: link:../../packages/realtime
@@ -776,9 +779,6 @@ importers:
       '@keel/testbed-lists':
         specifier: workspace:*
         version: link:../lists
-      '@keel/testbed-orgs':
-        specifier: workspace:*
-        version: link:../orgs
       '@keel/webhooks':
         specifier: workspace:*
         version: link:../../packages/webhooks
@@ -810,15 +810,15 @@ importers:
       '@keel/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@keel/organizations':
+        specifier: workspace:*
+        version: link:../../packages/organizations
       '@keel/search':
         specifier: workspace:*
         version: link:../../packages/search
       '@keel/testbed-lists':
         specifier: workspace:*
         version: link:../lists
-      '@keel/testbed-orgs':
-        specifier: workspace:*
-        version: link:../orgs
       '@keel/testbed-tags':
         specifier: workspace:*
         version: link:../tags

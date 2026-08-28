@@ -18,7 +18,7 @@
     "@keel/db": "workspace:*",
     "@keel/runtime": "workspace:*",
     "@keel/search": "workspace:*",
-    "@keel/testbed-orgs": "workspace:*",
+    "@keel/organizations": "workspace:*",
     "drizzle-orm": "0.45.2",
     "zod": "4.4.3"
   },

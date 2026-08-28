@@ -1,6 +1,6 @@
 import { requireUserOrRedirect } from '@keel/auth/session';
+import { requireScopeOrRedirect } from '@keel/organizations/scope';
 import { listLists } from '@keel/testbed-lists';
-import { requireScopeOrRedirect } from '@keel/testbed-orgs/scope';
 import { SignOutButton } from '../sign-out-button.tsx';
 import { ListManager } from './list-manager.tsx';
 

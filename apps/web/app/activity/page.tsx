@@ -1,5 +1,5 @@
 import { listActivity } from '@keel/audit';
-import { requireScopeOrRedirect } from '@keel/testbed-orgs/scope';
+import { requireScopeOrRedirect } from '@keel/organizations/scope';
 import Link from 'next/link';
 import { ActivityFeed } from './activity-feed.tsx';
 

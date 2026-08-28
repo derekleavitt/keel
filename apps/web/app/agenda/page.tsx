@@ -1,5 +1,5 @@
 import { requireUserOrRedirect } from '@keel/auth/session';
-import { requireScopeOrRedirect } from '@keel/testbed-orgs/scope';
+import { requireScopeOrRedirect } from '@keel/organizations/scope';
 import { buildAgenda } from '@keel/testbed-views';
 import Link from 'next/link';
 import { SignOutButton } from '../sign-out-button.tsx';

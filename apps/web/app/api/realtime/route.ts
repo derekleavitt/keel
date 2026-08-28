@@ -1,3 +1,4 @@
+import { requireScopeOrNull } from '@keel/organizations/scope';
 import {
   changesSince,
   currentCursor,
@@ -5,7 +6,6 @@ import {
   REAUTHORIZE_EVERY_MS,
 } from '@keel/realtime';
 import { roleOnList } from '@keel/testbed-lists';
-import { requireScopeOrNull } from '@keel/testbed-orgs/scope';
 
 export const dynamic = 'force-dynamic';
 

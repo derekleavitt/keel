@@ -15,7 +15,7 @@ import { and, desc, eq, isNull } from 'drizzle-orm';
  * This module answers exactly one question: *which identity is presenting this token*. It
  * deliberately does not answer "and may they act in this organization" — that is a
  * membership question, and routing it through the same check the browser uses is what
- * keeps one authorization path rather than two. See `testbed/orgs/src/scope.ts`.
+ * keeps one authorization path rather than two. See `packages/organizations/src/scope.ts`.
  */
 
 /** `keel_sk_` + 16 hex selector + 48 hex verifier. */

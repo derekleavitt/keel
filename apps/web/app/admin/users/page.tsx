@@ -1,5 +1,5 @@
+import { findUsers, recordAndDisclose } from '@keel/admin';
 import { requirePlatformAdmin } from '@keel/auth/session';
-import { findUsers, recordAndDisclose } from '@keel/testbed-admin';
 import { notFound } from 'next/navigation';
 
 export const dynamic = 'force-dynamic';

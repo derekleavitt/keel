@@ -8,8 +8,8 @@ import {
   shareListSchema,
   updateListSchema,
 } from '@keel/contracts/list';
+import { requireScope } from '@keel/organizations/scope';
 import { revalidatePath } from '@keel/runtime';
-import { requireScope } from '@keel/testbed-orgs/scope';
 
 /*
  * Revalidating `/lists` alone does NOT invalidate `/lists/[id]`. The write lands, the

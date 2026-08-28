@@ -1,8 +1,8 @@
 import { entitlements, LimitExceededError, requestsPerMinuteFor } from '@keel/billing';
 import type { Scope } from '@keel/contracts/ids';
 import type { Parser } from '@keel/contracts/parse';
+import { identifyRequest } from '@keel/organizations/scope';
 import { consume, rateLimitHeaders } from '@keel/rate-limit';
-import { identifyRequest } from '@keel/testbed-orgs/scope';
 
 /**
  * The shared shape of every v1 endpoint.

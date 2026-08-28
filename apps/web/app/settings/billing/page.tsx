@@ -1,7 +1,7 @@
 import { billingSummary, PLANS, recentBillingEvents } from '@keel/billing';
+import { listMembers } from '@keel/organizations';
+import { requireScopeOrRedirect } from '@keel/organizations/scope';
 import { listLists } from '@keel/testbed-lists';
-import { listMembers } from '@keel/testbed-orgs';
-import { requireScopeOrRedirect } from '@keel/testbed-orgs/scope';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';

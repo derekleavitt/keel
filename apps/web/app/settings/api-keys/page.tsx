@@ -1,5 +1,5 @@
 import { keyHint, listApiKeys } from '@keel/auth/api-key';
-import { requireScopeOrRedirect } from '@keel/testbed-orgs/scope';
+import { requireScopeOrRedirect } from '@keel/organizations/scope';
 import Link from 'next/link';
 import { KeyManager } from './key-manager.tsx';
 
