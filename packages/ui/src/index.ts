@@ -1,5 +1,6 @@
 export { Button, type ButtonProps } from './button.tsx';
 export { cn } from './cn.ts';
+export * from './use-live-updates.ts';
 export {
   type MutationResult,
   type SerialMutations,

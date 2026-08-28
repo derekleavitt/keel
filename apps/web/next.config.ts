@@ -24,6 +24,7 @@ const config: NextConfig = {
   // editing a package and seeing the effect in the app.
   transpilePackages: [
     '@keel/audit',
+    '@keel/realtime',
     '@keel/testbed-admin',
     '@keel/webhooks',
     '@keel/ui',

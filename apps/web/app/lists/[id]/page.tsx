@@ -1,5 +1,6 @@
 import { listActivity } from '@keel/audit';
 import { isTodoFilterNarrowing, type TodoFilter, todoFilterSchema } from '@keel/contracts/todo';
+import { currentCursor } from '@keel/realtime';
 import { listAttachments } from '@keel/testbed-attachments';
 import { getList, listShares, roleOnList } from '@keel/testbed-lists';
 import { requireScopeOrRedirect } from '@keel/testbed-orgs/scope';
@@ -8,6 +9,7 @@ import { listRules, listTodos } from '@keel/testbed-todos';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ActivityFeed } from '../../activity/activity-feed.tsx';
+import { LiveList } from './live-list.tsx';
 import { RepeatPanel } from './repeat-panel.tsx';
 import { SharePanel } from './share-panel.tsx';
 import { TodoFilters } from './todo-filters.tsx';
@@ -37,6 +39,13 @@ export default async function ListPage({
   const { id } = await params;
   const filter = readFilter(await searchParams);
   const scope = await requireScopeOrRedirect('/lists');
+
+  /*
+   * The cursor is taken **before** the page's data is read, never after. The other order
+   * drops anything that lands in between: the page renders state from T1, subscribes from
+   * T2, and silently never hears about the gap.
+   */
+  const cursor = await currentCursor(scope.organizationId);
 
   const list = await getList(scope, id);
   if (!list) notFound();
@@ -73,6 +82,7 @@ export default async function ListPage({
           ← All lists
         </Link>
         <h1 className="text-2xl font-semibold tracking-tight">{list.name}</h1>
+        <LiveList listId={id} cursor={cursor} />
         {role !== 'owner' && (
           <p className="text-xs text-muted">
             Shared with you · {role === 'editor' ? 'you can edit' : 'view only'}

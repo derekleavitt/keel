@@ -53,6 +53,9 @@ importers:
       '@keel/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs
+      '@keel/realtime':
+        specifier: workspace:*
+        version: link:../../packages/realtime
       '@keel/storage':
         specifier: workspace:*
         version: link:../../packages/storage
@@ -279,6 +282,31 @@ importers:
       zod:
         specifier: 4.4.3
         version: 4.4.3
+    devDependencies:
+      '@electric-sql/pglite':
+        specifier: 0.5.8
+        version: 0.5.8
+      '@types/node':
+        specifier: 26.3.0
+        version: 26.3.0
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: 4.1.11
+        version: 4.1.11(@types/node@26.3.0)(vite@8.2.2(@types/node@26.3.0)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12))
+
+  packages/realtime:
+    dependencies:
+      '@keel/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@keel/db':
+        specifier: workspace:*
+        version: link:../db
+      drizzle-orm:
+        specifier: 0.45.2
+        version: 0.45.2(@electric-sql/pglite@0.5.8)(kysely@0.29.5)(postgres@3.4.9)
     devDependencies:
       '@electric-sql/pglite':
         specifier: 0.5.8
@@ -671,6 +699,9 @@ importers:
       '@keel/jobs':
         specifier: workspace:*
         version: link:../../packages/jobs
+      '@keel/realtime':
+        specifier: workspace:*
+        version: link:../../packages/realtime
       '@keel/runtime':
         specifier: workspace:*
         version: link:../../packages/runtime
