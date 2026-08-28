@@ -13,7 +13,8 @@
     "./attachment": "./src/attachment.ts",
     "./parse": "./src/parse.ts",
     "./api-key": "./src/api-key.ts",
-    "./webhook": "./src/webhook.ts"
+    "./webhook": "./src/webhook.ts",
+    "./recurrence": "./src/recurrence.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -6,6 +6,7 @@ export * from './attachment.ts';
 export * from './env.ts';
 export * from './ids.ts';
 export * from './list.ts';
+export * from './recurrence.ts';
 export * from './tag.ts';
 export * from './todo.ts';
 export * from './webhook.ts';

@@ -48,7 +48,7 @@ repeated finding in this repo's history.
 | Capability | Driver | Why any platform needs it |
 |---|---|---|
 | Background jobs / queue | T-12 · **done at T-16** | Anything slow must leave the request path. Marked done at T-12 while its claim query had never once run against the production driver; T-16 was the first HTTP drain and it threw twice. See [[L-033]] |
-| Scheduled / recurring work | T-17 | Reminders, digests, cleanup, billing runs |
+| Scheduled / recurring work | T-17 · **done** | Reminders, digests, cleanup, billing runs. Generic date engine in `@keel/scheduling`; idempotent by constraint — see [[L-035]] |
 | Transactional email | T-12 | Password resets alone make this mandatory |
 
 ## Data and content

@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
   boolean,
   date,
@@ -7,6 +8,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { user } from './auth.ts';
 import { list } from './list.ts';
@@ -64,6 +66,21 @@ export const todo = pgTable(
      */
     priority: todoPriority('priority').default('none').notNull(),
     position: doublePrecision('position').notNull(),
+
+    /**
+     * The series this todo was generated from, and which occurrence it is.
+     *
+     * Nullable because most todos are not recurring. The pair carries a unique index, and
+     * **that index is the idempotency guarantee** — generation inserts with
+     * `on conflict do nothing`, so running the generator twice, or three overlapping
+     * workers running it at once, cannot produce a duplicate. No application-level "have I
+     * already done this" check can offer that under concurrency.
+     *
+     * `set null` rather than cascade on delete: deleting a series must not delete the
+     * todos it already produced, which are real work somebody may have done.
+     */
+    recurrenceRuleId: text('recurrence_rule_id'),
+    occurrenceDate: date('occurrence_date', { mode: 'string' }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .$defaultFn(() => new Date())
       .notNull(),
@@ -76,6 +93,11 @@ export const todo = pgTable(
     index('todo_list_done_position_idx').on(table.userId, table.listId, table.done, table.position),
     // The cross-list "due today" view (T-07) reads by date, not by list.
     index('todo_user_due_idx').on(table.userId, table.dueDate),
+    // The idempotency guarantee. Partial, so the millions of non-recurring todos are not
+    // in it and two null occurrence dates never collide.
+    uniqueIndex('todo_occurrence_idx')
+      .on(table.recurrenceRuleId, table.occurrenceDate)
+      .where(sql`${table.recurrenceRuleId} is not null`),
   ],
 );
 

@@ -1,5 +1,6 @@
 'use server';
 
+import { createRecurrenceSchema } from '@keel/contracts/recurrence';
 import {
   createTodoSchema,
   reorderTodoSchema,
@@ -18,6 +19,7 @@ import { requireScope } from '@keel/testbed-orgs/scope';
  * .orchestration/lessons/L-021.md.
  */
 import { createTodo, deleteTodo, reorderTodo, setTodoDone, updateTodo } from './queries.ts';
+import { createRule, deleteRule, pauseRule } from './recurrence.ts';
 
 /** Every export is a public endpoint: no helpers, no userId arguments, parse everything. */
 export async function createTodoAction(input: unknown) {
@@ -75,6 +77,46 @@ export async function deleteTodoAction(id: unknown) {
 
   const removed = await deleteTodo(scope, id);
   if (!removed) return { ok: false as const, error: 'Todo not found' };
+  revalidatePath('/lists', 'layout');
+  return { ok: true as const };
+}
+
+/**
+ * Repeating todos.
+ *
+ * The series and the instances are different objects, so these actions only ever touch the
+ * rule — deleting or completing a generated todo goes through the ordinary todo actions
+ * above and means exactly what it says.
+ */
+export async function createRecurrenceAction(input: unknown) {
+  const scope = await requireScope();
+  const parsed = createRecurrenceSchema.safeParse(input);
+  if (!parsed.success)
+    return { ok: false as const, error: parsed.error.issues[0]?.message ?? 'Invalid' };
+
+  const result = await createRule(scope, parsed.data);
+  if (!result.ok) return result;
+  revalidatePath('/lists', 'layout');
+  return { ok: true as const, generated: result.generated };
+}
+
+export async function deleteRecurrenceAction(id: unknown) {
+  const scope = await requireScope();
+  if (typeof id !== 'string') return { ok: false as const, error: 'Invalid series' };
+
+  const removed = await deleteRule(scope, id);
+  if (!removed) return { ok: false as const, error: 'Series not found' };
+  revalidatePath('/lists', 'layout');
+  return { ok: true as const };
+}
+
+export async function pauseRecurrenceAction(id: unknown, paused: unknown) {
+  const scope = await requireScope();
+  if (typeof id !== 'string' || typeof paused !== 'boolean')
+    return { ok: false as const, error: 'Invalid series' };
+
+  const changed = await pauseRule(scope, id, paused);
+  if (!changed) return { ok: false as const, error: 'Series not found' };
   revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }

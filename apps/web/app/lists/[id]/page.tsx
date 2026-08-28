@@ -4,10 +4,11 @@ import { listAttachments } from '@keel/testbed-attachments';
 import { getList, listShares, roleOnList } from '@keel/testbed-lists';
 import { requireScopeOrRedirect } from '@keel/testbed-orgs/scope';
 import { listTags, listTagsForTodos } from '@keel/testbed-tags';
-import { listTodos } from '@keel/testbed-todos';
+import { listRules, listTodos } from '@keel/testbed-todos';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ActivityFeed } from '../../activity/activity-feed.tsx';
+import { RepeatPanel } from './repeat-panel.tsx';
 import { SharePanel } from './share-panel.tsx';
 import { TodoFilters } from './todo-filters.tsx';
 import { TodoList } from './todo-list.tsx';
@@ -47,6 +48,7 @@ export default async function ListPage({
     // The history of this one list, served straight off the (target_type, target_id) index.
     listActivity(scope, { targetType: 'list', targetId: id, limit: 20 }),
   ]);
+  const series = await listRules(scope, id);
   // One query for every row's tags rather than one per row, and one for the suggestions
   // offered by the inline tag input. Tags are global to the user, so the second is not
   // scoped to this list.
@@ -105,6 +107,8 @@ export default async function ListPage({
           })),
         }))}
       />
+
+      <RepeatPanel listId={id} series={series} />
 
       <section className="flex flex-col gap-3">
         <h2 className="font-mono text-xs uppercase tracking-widest text-muted">History</h2>
