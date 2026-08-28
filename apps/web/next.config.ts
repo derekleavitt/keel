@@ -20,6 +20,15 @@ if (fs.existsSync(rootEnv)) process.loadEnvFile(rootEnv);
 
 const config: NextConfig = {
   reactStrictMode: true,
+  /*
+   * `standalone` traces the files the server actually needs into `.next/standalone`, so the
+   * runtime image can drop `node_modules` entirely. It matters more in a monorepo than a
+   * single app: without it the image has to carry every workspace package's dependencies,
+   * including the whole toolchain, because pnpm's symlinked store is not separable by hand.
+   *
+   * Vercel ignores this — it does its own tracing — so it costs nothing there.
+   */
+  output: 'standalone',
   // Internal packages ship TypeScript source directly — no build step between
   // editing a package and seeing the effect in the app.
   transpilePackages: [

@@ -1,0 +1,26 @@
+# Everything the build does not need. Keeping the context small is not only speed: a stray
+# `.env` copied into an image is a secret published to everyone who can pull it.
+.env
+.env.*
+!.env.example
+
+node_modules
+**/node_modules
+.next
+**/.next
+.turbo
+**/.turbo
+dist
+**/dist
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+.git
+.github
+test-results
+playwright-report
+.keel
+.orchestration
+docs
+*.md
+!README.md
