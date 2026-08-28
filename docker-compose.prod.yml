@@ -1,0 +1,76 @@
+# A production-shaped stack, runnable locally.
+#
+# Not a deployment target in itself — it exists so the image, the migration step and their
+# ordering can be exercised on a laptop before any of it is trusted on a host. Everything a
+# real platform needs to know is in `docs/deployment.md`.
+#
+#   docker compose -f docker-compose.prod.yml up --build
+#
+# The explicit project name is load-bearing.
+#
+# Compose derives a project name from the *directory*, not the file, so two compose files in
+# one repository share it by default — and `down -v` on either then removes the **other's**
+# volumes. That is how the development database was deleted the first time this file was
+# exercised: tearing this stack down took `keel-pgdata` with it.
+#
+# Only this file is named. Naming the development one too would fix nothing extra — one side
+# of the pair being distinct is enough — while renaming its project orphans the container and
+# volume of every checkout that already has one running. See
+# `.orchestration/lessons/L-047.md`.
+name: keel-prod
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: keel
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-keel}
+      POSTGRES_DB: keel
+    volumes:
+      - keel-prod-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U keel -d keel']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Migrations run from the **build** stage, not the runtime image.
+  #
+  # The runtime image deliberately carries no package manager and no drizzle-kit — that is
+  # most of what makes it a small attack surface. Rather than weakening it to make one
+  # release step convenient, the step uses the stage that already has the toolchain.
+  #
+  # It is a separate service and not an entrypoint on purpose: an app that migrates on boot
+  # runs the migration once per replica, concurrently, and turns a rolling deploy into a
+  # race. This runs exactly once and must succeed before anything serves.
+  migrate:
+    build:
+      context: .
+      target: build
+    command: pnpm db:migrate
+    environment:
+      DATABASE_URL: postgres://keel:${POSTGRES_PASSWORD:-keel}@postgres:5432/keel
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  app:
+    build:
+      context: .
+      target: runtime
+    restart: unless-stopped
+    ports:
+      - '${PORT:-3100}:3000'
+    environment:
+      DATABASE_URL: postgres://keel:${POSTGRES_PASSWORD:-keel}@postgres:5432/keel
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?set BETTER_AUTH_SECRET}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3100}
+      JOBS_SECRET: ${JOBS_SECRET:-}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  keel-prod-pgdata:

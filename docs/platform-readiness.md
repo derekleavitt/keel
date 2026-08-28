@@ -88,7 +88,7 @@ wire format, the framework's caching, and the driver that actually ships. See
 |---|---|---|
 | Structured logging and error reporting | T-12 · **done** | A background job failing silently is the classic outage. JSON events on stderr, searchable by `event` |
 | Observability of the gate itself | built | `pnpm loop:status` |
-| Deployment story | T-21 | Vercel-first, Docker-ready, documented and exercised |
+| Deployment story | K-008 · **done (container exercised)** | Image builds, boots against real Postgres, migrates and serves — verified locally. Hosting is documented but untested: it needs the operator's own account. See `docs/deployment.md` |
 
 ---
 

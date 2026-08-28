@@ -1,0 +1,7 @@
+# A real file, so `public/` exists in a clean checkout.
+#
+# The directory is optional to Next and required by the Dockerfile's COPY, which fails the
+# build when it is absent — a template that cannot build its own image on a clean clone is
+# worse than one with an extra file in it.
+User-agent: *
+Allow: /
