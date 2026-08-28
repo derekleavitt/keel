@@ -1,33 +1,29 @@
 {
-  "name": "@keel/auth",
+  "name": "@keel/testbed-admin",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./client": "./src/client.ts",
-    "./next": "./src/next.ts",
-    "./session": "./src/session.ts",
-    "./api-key": "./src/api-key.ts",
-    "./platform": "./src/platform.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@keel/auth": "workspace:*",
     "@keel/contracts": "workspace:*",
     "@keel/db": "workspace:*",
-    "better-auth": "1.7.1",
+    "@keel/jobs": "workspace:*",
+    "@keel/audit": "workspace:*",
+    "@keel/webhooks": "workspace:*",
+    "@keel/testbed-orgs": "workspace:*",
     "drizzle-orm": "0.45.2"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@types/node": "26.3.0",
-    "next": "16.3.3",
     "typescript": "5.9.3",
     "vitest": "4.1.11"
-  },
-  "peerDependencies": {
-    "next": ">=16"
   }
 }

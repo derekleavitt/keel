@@ -18,6 +18,7 @@
     "@keel/email": "workspace:*",
     "@keel/jobs": "workspace:*",
     "@keel/storage": "workspace:*",
+    "@keel/testbed-admin": "workspace:*",
     "@keel/testbed-attachments": "workspace:*",
     "@keel/testbed-lists": "workspace:*",
     "@keel/testbed-orgs": "workspace:*",

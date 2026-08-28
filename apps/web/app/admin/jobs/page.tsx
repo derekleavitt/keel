@@ -1,4 +1,3 @@
-import { requireUserOrRedirect } from '@keel/auth/session';
 import { deadJobs, pendingJobs } from '@keel/jobs';
 import { retryJobAction } from './actions.ts';
 import { RetryButton } from './retry-button.tsx';
@@ -11,12 +10,11 @@ export const dynamic = 'force-dynamic';
  * A dead-letter queue nobody looks at is the same as no dead-letter queue — the job stops
  * retrying, nothing errors, and the work silently never happens. This page is the "look".
  *
- * Signed-in users only, which is deliberately weak: proper role-gating arrives with T-18,
- * and until then visibility matters more than restriction — the failure mode this prevents
- * is nobody noticing, not the wrong person noticing.
+ * Staff only. The gate is `app/admin/layout.tsx`, which covers every route beneath it —
+ * this page used to check only that the caller was signed in, which meant any customer
+ * could read every tenant's failing jobs, payloads included.
  */
 export default async function AdminJobsPage() {
-  await requireUserOrRedirect('/admin/jobs');
   const [dead, pending] = await Promise.all([deadJobs(), pendingJobs()]);
 
   return (
