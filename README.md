@@ -1,158 +1,17 @@
 # Keel
 
-**A Next.js starter for building large web platforms with coding agents.**
+**A Next.js starter for building web platforms with Claude Code.**
 
-Not "AI-friendly" in the sense of having good docs. Keel is built around a single claim about
-how agents actually fail on large codebases, and every mechanism here follows from it:
+Clone it, point an agent at it, and start building. The repository is set up so a fresh agent
+is productive immediately: a short entry point, constraints it cannot accidentally violate,
+and one command that decides whether the work is finished.
 
-> **Agents are ephemeral. Context is durable.**
-
-A subagent is a fresh context window that spawns, works, and evaporates. Nothing persists in
-it. So you never try to keep an agent informed — you make the **repository** informative
-enough that a cold agent is productive in seconds, and you make the important constraints
-impossible to violate rather than merely documented.
-
-Keel is that context layer, plus a platform substantial enough to prove it works at scale.
+Multi-tenancy, auth, billing, background jobs, a public API and more are already built and
+tested, so your first feature starts on a platform rather than an empty app.
 
 ---
 
-## The four failure modes
-
-Agents fail on large codebases in ways that are specific and addressable:
-
-| Failure | What Keel does about it |
-|---|---|
-| **Burning context rediscovering the repo** | A 132-line `CLAUDE.md`, and path-scoped rules that load only when the matching files are touched |
-| **No machine-checkable "done"** | `pnpm verify` on the `Stop` hook — an agent *cannot finish a turn* while it is red |
-| **Repeating mistakes across sessions** | A lesson ledger the gate refuses to let decay |
-| **Documentation drifting into lies** | Conventions enforced by code, not prose — and where that fails, it is recorded as a lesson |
-
-### The gate is the load-bearing piece
-
-```bash
-pnpm verify   # lint · typecheck · unit · lessons · build · (opt-in) browser
-```
-
-It runs on the Claude Code `Stop` hook via `.claude/settings.json`, exiting non-zero to block.
-An agent that breaks something cannot end its turn and declare success — the definition of
-done is executable, not a judgement call.
-
-**~40 seconds including 100 browser tests.** Speed is a correctness property here: a gate slow
-enough to be annoying is a gate someone disables. Twice during development the suite got slow,
-and both times the cause was real — a leaked socket, then two parallel runners each sizing
-themselves to the machine.
-
-### The lesson ledger, and why it can't rot
-
-Forty-eight lessons in `.orchestration/lessons/`. Each one names an **enforcement mechanism**,
-and the gate fails if a lesson claims one that doesn't exist:
-
-```
-✗ L-035: enforcement_ref 'testbed/todos/src/recurrence.test.ts' does not exist.
-  A lesson claiming enforcement that is absent is worse than one claiming none.
-```
-
-That check is what separates a ledger from a folder of good intentions. A lesson is promoted
-along a ladder — test > lint > hook > gate > example > rule > doc — so the strongest available
-mechanism is the one that holds it, and "we should remember to…" is the last resort rather
-than the first.
-
-It works. Three separate lessons converged independently on the same principle:
-
-> When correctness depends on "nobody else did this at the same moment", it belongs in a
-> constraint or a single statement — never in a check.
-
-A unique index for recurring todos, a primary key on the provider's event id for billing, one
-`INSERT … ON CONFLICT` for rate limiting.
-
-### Boundaries an agent cannot talk its way past
-
-Package boundaries are enforced by **module resolution, not lint rules**. A package that
-doesn't declare a dependency fails to build when it imports one — there is no comment that
-suppresses it, no `eslint-disable` to reach for. Structural safety beats procedural
-politeness, which matters more as the codebase grows past what fits in one context window.
-
-## How it was built — and why that's the interesting part
-
-Keel was not specified and then implemented. A real multi-tenant application was built **on**
-it, in the same workspace and behind the same gate, and grown deliberately — sharing, then
-organizations, jobs, a public API, webhooks, billing — until each capability was genuinely
-demanded. **Friction building the app generated the platform's backlog.** Nothing was built
-because a design document predicted it.
-
-Twenty-six iterations are written up in `.orchestration/journal/`, mistakes included: a job
-queue that was green for four tasks without ever having run, a rate limit so tight the test
-suite tripped it against itself, a development database deleted by a `down -v` that crossed
-compose files.
-
-### The method's sharpest result was about the design itself
-
-A self-updating code graph was one of the founding requirements — the durable map an agent
-would consult instead of re-reading the repo. So it was tested honestly: ten consecutive
-cross-cutting features, each the archetypal case for one, checked against *"would a graph have
-helped here?"*
-
-| Feature | What actually found the problem |
-|---|---|
-| Organizations across every package | `tsc` — 62 compile errors formed a complete worklist |
-| A second auth mechanism | reading twelve lines of a fallback branch |
-| Webhooks over the queue | running it — two driver incompatibilities |
-| Live updates | knowing `NOTIFY` has no replay, and that `0` is a real cursor |
-| Billing across features | **Turbo's cycle check** — already in the gate, free |
-
-**The failures that cost real time were semantic, not structural.** A graph answers "what
-references this?" Not one of these was blocked on that question.
-
-This is not an argument against the goal — the goal was durable context an agent can trust,
-and that goal was met. It is a finding about *which mechanism delivers it*: a strict type
-system, a fast gate and an enforced lesson ledger occupied the space a graph was predicted to
-fill. Fourteen of twenty-one architectural predictions did not survive contact with the work;
-the evidence for each is in
-[`.orchestration/predictions-review.md`](./.orchestration/predictions-review.md).
-
-That is the method paying for itself. The alternative was building all twenty-one first and
-finding out afterwards.
-
-## The loop
-
-Keel is designed to be built *by* an agent running unattended, and it was:
-
-- **`.orchestration/loop-protocol.md`** — one iteration: pick a task, build it, record the
-  friction, close it.
-- **Crash-safe resume** — `pnpm loop:status` reconstructs where the last session stopped from
-  task frontmatter, locks and git history. Derived state is regenerated, never stored, so it
-  cannot describe someone else's machine.
-- **Circuit breakers** — `scripts/loop-guard.mjs` halts on identical repeated failures, too
-  many iterations on one task, or consecutive red runs.
-- **Done is a capability list, not a task count** —
-  [`docs/platform-readiness.md`](./docs/platform-readiness.md), where every row names what
-  proved it.
-
-## What the method produced
-
-The platform below is **evidence, not the pitch** — it exists because building the test
-application demanded it, and each row was exercised rather than asserted:
-
-Auth and sessions · API keys · platform-staff roles as a separate axis from tenant roles ·
-multi-tenancy with a branded `Scope` no signature can bypass · composable authorization
-predicates · a Postgres job queue · transactional email · blob storage · audit logging ·
-plans and limits enforced in the query layer · idempotent, order-safe billing webhooks ·
-cross-instance rate limiting · a versioned public API · signed outbound webhooks · realtime
-over SSE · full-text search · DST-correct recurrence · a cross-tenant admin surface
-
-When you want it gone:
-
-```bash
-pnpm eject:testbed --confirm
-```
-
-Removes the application — 5,400 lines across 6 feature packages, its schema, routes, contracts
-and specs — and leaves a repo whose **gate still passes**: 236 unit tests, 38 browser tests,
-and no application. Verified by cloning this repo, ejecting, and running the gate. Lessons
-whose enforcement lived in the removed tests are archived rather than deleted; the reasoning
-about daylight saving and idempotency is not about todo lists.
-
-## Getting started
+## Quick start
 
 ```bash
 pnpm install
@@ -161,44 +20,187 @@ pnpm db:migrate
 pnpm dev
 ```
 
-No account anywhere, no `.env` to hand-edit, no Postgres to install. `pnpm verify` passes on a
-clean checkout with **no `.env` at all** — environment, database and auth are lazily
-initialised, a property the Dockerfile depends on and re-tests on every image build.
+No account anywhere, no `.env` to hand-edit, no Postgres to install. Open
+`http://localhost:3000`, create an account, and you're in.
 
-**Then read [CLAUDE.md](./CLAUDE.md).** It is the entry point for your agent and deliberately
-short, because context spent on instructions is context not spent on the problem.
-[AGENTS.md](./AGENTS.md) points other coding agents at the same guidance.
+A demo todo application ships with it so nothing is hypothetical. When you're ready to
+replace it with your own:
+
+```bash
+pnpm eject:testbed            # preview what goes
+pnpm eject:testbed --confirm
+```
+
+That removes the demo and leaves the platform, with the test suite still passing.
+
+## Build your first feature
+
+Every feature follows the same shape. Copy [`examples/notes`](./examples/notes) — it is a
+complete vertical slice, heavily commented, and it compiles.
+
+**1. Add your tables** in `packages/db/src/schema/<feature>.ts` — a new file, so parallel work
+never conflicts. Add two lines to `schema/index.ts`: one re-export, one spread. Then:
+
+```bash
+pnpm db:generate && pnpm db:migrate
+```
+
+**2. Add validation** in `packages/contracts/src/<feature>.ts`. Zod schemas live here so
+every layer agrees on the same shapes.
+
+**3. Create the package** — `packages/<feature>/package.json` with
+`"exports": { ".": "./src/index.ts" }`, a `tsconfig.json` extending the base, and
+`typecheck` / `test:unit` scripts. Run `pnpm install` twice; the first pass reports the
+lockfile as current and skips linking.
+
+**4. Write queries** in `src/queries.ts`. Every one takes a `Scope` as its first argument:
+
+```ts
+export async function listProjects(scope: Scope, database: KeelDatabase = db()) {
+  return database.select().from(project).where(visibleVia(project.id, scope));
+}
+```
+
+`Scope` is branded, so a query that forgets tenancy is a **compile error**, not a data leak.
+Authorization is expressed once as a composable predicate and never re-derived — that is what
+keeps one query from being quietly more permissive than the rest.
+
+**5. Write server actions** in `src/actions.ts`. Every export from a `'use server'` file is a
+public HTTP endpoint, so: never accept a `userId` argument, never export helpers, and validate
+every input with a contract schema before it reaches a query.
+
+**6. Test against real Postgres.** `createTestDatabase()` gives you PGlite with your migrations
+applied — real constraints, real cascades, fast enough to run per test.
+
+**7. Add routes** in `apps/web/app/`. Keep them thin: compose packages, don't put logic here.
+
+**8. Run the gate.**
+
+```bash
+pnpm verify
+```
+
+## What you get for free
+
+Building on top of these rather than writing them:
+
+| | |
+|---|---|
+| **Auth** | Sign-up, sign-in, sessions, password handling — Better Auth, wired |
+| **Multi-tenancy** | Organizations, membership, invitations; `Scope` on every query |
+| **Sharing** | Per-resource grants that compose into your own queries |
+| **API keys** | Split-token, hashed, revocable, per-key rate limits |
+| **Admin roles** | Platform staff as a *separate axis* from tenant roles |
+| **Background jobs** | Postgres queue: transactional enqueue, backoff, dead letter |
+| **Scheduled work** | Recurrence rules, DST-correct, idempotent generation |
+| **Billing** | Plans, limits enforced in the query layer, idempotent provider webhooks |
+| **Rate limiting** | Shared across instances, sliding window |
+| **Public API** | Versioned `/api/v1`, documented error codes |
+| **Outbound webhooks** | Signed, retried, replayable, SSRF-guarded |
+| **Realtime** | Server-sent events, re-authorized while open, degrades to polling |
+| **Full-text search** | Postgres FTS with an index that cannot fall behind |
+| **Audit log** | Recorded at the query layer, so every entry point is covered |
+| **File storage** | Driver interface, local in development |
+| **Email** | Writes to `.keel/mail/` in development and never sends |
+
+Each is documented where you'd look for it — see [Reference](#reference).
+
+## Working with an agent
+
+**Point it at [CLAUDE.md](./CLAUDE.md).** That is the entry point: layout, conventions, and
+the handful of things that will bite if missed. It is deliberately short, because context
+spent reading instructions is context not spent on your problem.
+
+**Rules load on demand.** `.claude/rules/*.md` carry `paths:` frontmatter, so the rules about
+schema design load when your agent touches `packages/db/**` and stay out of the way otherwise.
+
+**`pnpm verify` is the definition of done.** It runs lint, typecheck, unit tests, the lesson
+ledger and the build, and it is wired to the Claude Code `Stop` hook in `.claude/settings.json`
+— so **an agent cannot finish a turn while the repo is broken**. Roughly 40 seconds including
+the browser suite; a few seconds without it.
+
+**Record what goes wrong.** When your agent hits a real bug, write a lesson in
+`.orchestration/lessons/` naming the mechanism that stops it recurring — a test, a lint rule,
+a hook. The gate fails if a lesson names enforcement that doesn't exist, so the ledger can't
+decay into a folder of good intentions.
+
+**For unattended runs**, `.orchestration/` has a task backlog, a loop protocol, circuit
+breakers, and `pnpm loop:status` to reconstruct where a crashed session stopped.
+
+## Everyday commands
+
+```bash
+pnpm dev              # all dev servers
+pnpm verify           # the gate — lint, typecheck, tests, build
+pnpm verify unit      # iterate on one step
+KEEL_E2E=1 pnpm verify   # include the browser suite
+pnpm lint:fix         # format and autofix — run before verify
+pnpm db:generate      # create a migration from schema changes
+pnpm db:migrate       # apply migrations
+pnpm db:studio        # browse the database
+pnpm admin:grant you@example.com   # grant platform-staff access
+```
+
+## Configuration
+
+`pnpm db:up` writes a working `.env`. For anything beyond local development:
+
+| Variable | Required | Notes |
+|---|---|---|
+| `DATABASE_URL` | yes | Postgres |
+| `BETTER_AUTH_SECRET` | yes | ≥32 characters; rotating it signs everyone out |
+| `BETTER_AUTH_URL` | yes | Your public origin |
+| `JOBS_SECRET` | to run jobs | The worker endpoint refuses everything without it |
+| `BILLING_WEBHOOK_SECRET` | with a payment provider | See [docs/billing.md](./docs/billing.md) |
+
+New variables go in `packages/contracts/src/env.ts` **and** `.env.example`. Reading
+`process.env` anywhere else is a bug the review will catch.
+
+`pnpm verify` passes with no `.env` at all — environment, database and auth are lazily
+initialised, so tests and builds never need secrets.
+
+## Deploying
+
+```bash
+docker build -t your-app .
+docker run -p 3000:3000 -e DATABASE_URL=… -e BETTER_AUTH_SECRET=… your-app
+```
+
+Run migrations as a **release step**, never on boot — every replica would migrate at once
+during a rolling deploy. And point a scheduler at `POST /api/jobs/run` every minute, or
+background work silently never happens.
+
+Full detail, including Vercel and what is untested, in
+[docs/deployment.md](./docs/deployment.md).
 
 ## Stack
 
 Next.js 16 · React 19 · TypeScript 5.9 strict · pnpm + Turborepo · Postgres + Drizzle ·
 Better Auth · Tailwind 4 · Biome · Vitest + PGlite · Playwright
 
-TypeScript 5.9 rather than 7 is deliberate and measured: TS7 couldn't resolve Next's
-`typedRoutes` ambient namespace, and was *slower* here. The claim that motivated the upgrade
-went untested for a phase — that is lesson `L-013`.
+Internal packages export TypeScript source directly — no build step between editing a package
+and seeing the effect. Package boundaries are enforced by module resolution: a package that
+doesn't declare a dependency fails to build when it imports one.
 
-## Honest limits
-
-- **Multiple simultaneous agents is designed, not proven.** Territories and a task ledger are
-  specified; every iteration after the first ran as a single agent. That is absence of
-  evidence, not evidence of absence — and it is the one founding goal still owed a real test.
-- **Hosting is untested.** The container builds, boots against real Postgres, migrates and
-  serves — locally. Deploying needs an account that isn't the template's to hold, so
-  [`docs/deployment.md`](./docs/deployment.md) presents Vercel as a checklist, not a guarantee.
-- **No payment provider is wired.** The interface, reconciliation and limits are built and
-  tested against a stub; connecting a real one is four functions and your keys.
-
-## Documentation
+## Reference
 
 | | |
 |---|---|
-| [CLAUDE.md](./CLAUDE.md) | The agent entry point |
-| [docs/platform-readiness.md](./docs/platform-readiness.md) | What "done" means, row by row |
+| [CLAUDE.md](./CLAUDE.md) | Agent entry point — read this first |
+| [examples/notes](./examples/notes) | The vertical slice to copy |
 | [docs/architecture.md](./docs/architecture.md) | Why the repo is shaped this way |
-| [.orchestration/loop-protocol.md](./.orchestration/loop-protocol.md) | How one build iteration works |
-| [.orchestration/predictions-review.md](./.orchestration/predictions-review.md) | Which architectural bets survived, with evidence |
-| [docs/api.md](./docs/api.md) · [docs/billing.md](./docs/billing.md) · [docs/deployment.md](./docs/deployment.md) | The platform surfaces |
+| [docs/api.md](./docs/api.md) | Public API, keys, webhooks, rate limits |
+| [docs/billing.md](./docs/billing.md) | Plans, limits, wiring a payment provider |
+| [docs/deployment.md](./docs/deployment.md) | Container, hosting, migrations, the worker |
+| [.claude/rules/](./.claude/rules/) | Per-area constraints your agent loads on demand |
+
+## Known gaps
+
+- **No payment provider is wired.** Plans, limits and webhook reconciliation are built and
+  tested against a stub; connecting a real one is four functions and your keys.
+- **Hosting is documented but untested** — the container is verified locally only.
+- **Parallel agents are designed, not proven.** Territories and a task ledger are specified in
+  `.orchestration/`; everything here was built by one agent at a time.
 
 ## License
 
