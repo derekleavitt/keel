@@ -221,6 +221,62 @@ dropLines(
 );
 dropLines('packages/contracts/src/index.ts', new RegExp(`'\\./${REMOVED}\\.ts'`));
 
+/**
+ * Archive lessons whose enforcement went with the testbed.
+ *
+ * The gate fails if a lesson names an enforcement mechanism that does not exist — that check
+ * is what stops the ledger decaying into folklore, and it fires correctly here: fourteen
+ * lessons are enforced by tests that just left with the reference application.
+ *
+ * Deleting them would be the easy fix and the wrong one. "Adding a day is not adding 86.4
+ * million milliseconds" is true of any codebase, and the reasoning is the part worth keeping.
+ * Moving them under `archive/` keeps the knowledge and removes the false claim, because the
+ * validator only reads `L-*.md` at the top level.
+ */
+const lessonsDir = path.join(root, '.orchestration', 'lessons');
+if (fs.existsSync(lessonsDir)) {
+  const archive = path.join(lessonsDir, 'archive');
+  const archived = [];
+
+  for (const name of fs.readdirSync(lessonsDir).filter((f) => /^L-\d+\.md$/.test(f))) {
+    const file = path.join(lessonsDir, name);
+    const ref = /^enforcement_ref:\s*(.+)$/m.exec(fs.readFileSync(file, 'utf8'))?.[1];
+    if (!ref) continue;
+
+    // `path:line` is a valid reference; only the path decides whether it still resolves.
+    const target = ref.trim().split(':')[0];
+    if (target && !fs.existsSync(path.join(root, target))) {
+      fs.mkdirSync(archive, { recursive: true });
+      fs.renameSync(file, path.join(archive, name));
+      archived.push(name.replace('.md', ''));
+    }
+  }
+
+  if (archived.length > 0) {
+    fs.writeFileSync(
+      path.join(archive, 'README.md'),
+      [
+        '# Archived lessons',
+        '',
+        'These were enforced by tests belonging to the reference application, which',
+        '`pnpm eject:testbed` removed. The enforcement is gone; the reasoning is not.',
+        '',
+        'They are here rather than deleted because most of them are about the problem, not',
+        'about todo lists — daylight saving arithmetic, idempotency under concurrency,',
+        'sentinel values that collide with real ones. If you hit the same class of problem,',
+        'the analysis is already written.',
+        '',
+        'The gate does not read this directory, so nothing here claims an enforcement it no',
+        'longer has.',
+        '',
+        `Archived: ${archived.join(', ')}`,
+        '',
+      ].join('\n'),
+    );
+    console.log(`\nArchived ${archived.length} lessons whose enforcement left with the testbed.`);
+  }
+}
+
 /*
  * Format what was just rewritten.
  *
