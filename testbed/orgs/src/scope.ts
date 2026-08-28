@@ -105,3 +105,20 @@ export async function scopeFromRequest(request: Request): Promise<Scope | null> 
     return null;
   }
 }
+
+/**
+ * The scope, or null when there is no signed-in user.
+ *
+ * Neither of the existing shapes fits a streaming endpoint: `requireScope()` throws, which
+ * becomes a 500 rather than a 401, and `requireScopeOrRedirect()` issues a redirect that an
+ * `EventSource` will silently follow to an HTML page and then fail to parse. An API that
+ * answers requests rather than serving pages needs the third form — say so plainly and let
+ * the caller choose the status code.
+ */
+export async function requireScopeOrNull(): Promise<Scope | null> {
+  try {
+    return await requireScope();
+  } catch {
+    return null;
+  }
+}

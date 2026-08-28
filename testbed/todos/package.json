@@ -16,6 +16,7 @@
     "@keel/contracts": "workspace:*",
     "@keel/db": "workspace:*",
     "@keel/jobs": "workspace:*",
+    "@keel/realtime": "workspace:*",
     "@keel/runtime": "workspace:*",
     "@keel/scheduling": "workspace:*",
     "@keel/search": "workspace:*",

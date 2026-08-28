@@ -3,6 +3,7 @@ import type { Scope } from '@keel/contracts/ids';
 import type { TodoFilter, TodoPriority } from '@keel/contracts/todo';
 import { db } from '@keel/db';
 import { list, type schema, todo, todoTag } from '@keel/db/schema';
+import { channelFor, publish } from '@keel/realtime';
 import {
   editableVia,
   evenPositions,
@@ -226,6 +227,8 @@ export async function createTodo(
    * happens in the worker, which is what keeps a dead receiver from slowing this down.
    */
   await emit(scope, 'todo.created', { id: row.id, listId: row.listId, title: row.title }, database);
+  // Same seam as the audit entry and the webhook: in this transaction, beside the write.
+  await publish(scope, channelFor('list', row.listId), database);
   return row;
 }
 
@@ -288,6 +291,7 @@ export async function setTodoDone(
     { id: row.id, listId: row.listId, title: row.title, done },
     database,
   );
+  await publish(scope, channelFor('list', row.listId), database);
   return row;
 }
 
@@ -359,7 +363,9 @@ export async function reorderTodo(
 export async function deleteTodo(scope: Scope, id: string, database: TodosDatabase = db()) {
   return database.transaction(async (tx) => {
     const [owned] = await tx
-      .select({ id: todo.id })
+      // `listId` as well as `id`: the change notification names the list, and after the
+      // delete there is no row left to read it from.
+      .select({ id: todo.id, listId: todo.listId })
       .from(todo)
       .where(editable(scope, eq(todo.id, id)))
       .limit(1);
@@ -384,6 +390,7 @@ export async function deleteTodo(scope: Scope, id: string, database: TodosDataba
       tx,
     );
     await emit(scope, 'todo.deleted', { id }, tx);
+    await publish(scope, channelFor('list', owned.listId), tx);
     return true;
   });
 }

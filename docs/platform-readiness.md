@@ -57,7 +57,7 @@ repeated finding in this repo's history.
 |---|---|---|
 | File upload and storage | T-13 | Avatars, attachments, imports, exports |
 | Full-text search | T-19 · **done** | Every list view outgrows a `LIKE` query. Per-feature sources merged by a composition layer; index is a generated column, so it cannot lag |
-| Real-time updates | T-20 | Two tabs disagreeing is a bug users report |
+| Real-time updates | T-20 · **done** | Two tabs disagreeing is a bug users report. SSE over a Postgres change log; re-authorized while open — see [[L-042]] |
 
 ## External surface
 
