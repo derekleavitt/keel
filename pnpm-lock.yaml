@@ -629,6 +629,9 @@ importers:
       '@keel/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@keel/billing':
+        specifier: workspace:*
+        version: link:../../packages/billing
       '@keel/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

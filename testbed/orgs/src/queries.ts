@@ -1,7 +1,8 @@
+import { checkLimit } from '@keel/billing';
 import type { OrganizationId, Scope, UserId } from '@keel/contracts/ids';
 import { db, type KeelDatabase } from '@keel/db';
 import { membership, organization, user } from '@keel/db/schema';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, count, eq } from 'drizzle-orm';
 
 /**
  * Organizations and membership.
@@ -164,7 +165,14 @@ export async function addMember(
   scope: Scope,
   input: { email: string; role: 'admin' | 'member' },
   database: KeelDatabase = db(),
-): Promise<{ ok: true } | { ok: false; reason: 'not-allowed' | 'no-such-user' | 'personal' }> {
+): Promise<
+  | { ok: true }
+  | {
+      ok: false;
+      reason: 'not-allowed' | 'no-such-user' | 'personal' | 'no-seats';
+      seats?: { used: number; limit: number | null; plan: string };
+    }
+> {
   const [org] = await database
     .select({ personal: organization.personal })
     .from(organization)
@@ -188,6 +196,40 @@ export async function addMember(
     .where(eq(user.email, input.email.trim().toLowerCase()))
     .limit(1);
   if (!recipient) return { ok: false, reason: 'no-such-user' };
+
+  const [existing] = await database
+    .select({ userId: membership.userId })
+    .from(membership)
+    .where(
+      and(eq(membership.organizationId, scope.organizationId), eq(membership.userId, recipient.id)),
+    )
+    .limit(1);
+
+  /*
+   * The seat limit is checked here, in the query layer, so the public API cannot route around
+   * it — the same placement and the same argument as the list limit in T-21.
+   *
+   * Only when *adding* someone. Changing an existing member's role does not consume a seat,
+   * and a tenant already over its allowance must still be able to demote or promote the people
+   * it has: the limit governs growth, not existing state. That distinction matters because a
+   * downgrade from ten seats to one leaves nine people in place, and locking them out to
+   * enforce a number is a worse outcome than letting the count sit over.
+   */
+  if (!existing) {
+    const [{ n: used } = { n: 0 }] = await database
+      .select({ n: count() })
+      .from(membership)
+      .where(eq(membership.organizationId, scope.organizationId));
+
+    const allowance = await checkLimit(scope.organizationId, 'seats', Number(used), database);
+    if (!allowance.allowed) {
+      return {
+        ok: false,
+        reason: 'no-seats',
+        seats: { used: allowance.used, limit: allowance.limit, plan: allowance.plan },
+      };
+    }
+  }
 
   await database
     .insert(membership)
