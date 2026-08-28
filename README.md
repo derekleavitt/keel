@@ -1,188 +1,179 @@
 # Keel
 
-**Most starters optimise the first hour. Keel is about the ten-thousandth run.**
+Most starters optimise the first hour. This one is about the ten thousandth run.
 
-Hour one is easy — any scaffold gets you a running app. What decides whether a large platform
-survives is what happens two years in, when nobody remembers why a constraint exists, the
-documentation quietly stopped being true, and the thing about to change it has never seen the
-codebase before.
+Hour one is easy. Any scaffold gets you a running app, and every starter competes on how fast
+that happens. But the first hour was never the hard part. The hard part is two years in, when
+nobody remembers why a constraint exists, half the documentation quietly stopped being true,
+and the thing about to change your billing code has never seen the codebase before.
 
-This document is about that problem, not about a feature list.
+That's the problem this is about.
 
----
+## Start from what your workers actually are
 
-## The permanent condition
+If you're building a large platform mostly with coding agents, it helps to be blunt about what
+you're working with. They forget everything — every session starts from zero, there's no
+tenure, no "we tried that in 2024," nobody to ask. They see a sliver: a context window holds
+maybe a few percent of a big codebase, and whatever the agent knows about your system it
+learned four minutes ago from whatever files it happened to open. And if the whole point is
+parallelism, you'll eventually have several of them running at once, with no shared memory and
+no way to coordinate except through the repo itself.
 
-If you are building a large platform primarily with coding agents, your workers have three
-properties that will not change:
+None of that is going to change. It's not a limitation to engineer around, it's the weather.
 
-**They forget everything.** Every session begins from nothing. There is no tenure, no "I
-remember when we tried that," no colleague to ask.
-
-**They see a fraction.** A context window holds a slice of a large codebase, and never the
-whole. Whatever the agent knows about your system, it learned in the last few minutes, from
-whatever it happened to open.
-
-**Eventually there are many at once.** The value of agent labour is parallelism. That means
-concurrent writers with no shared memory and no ability to coordinate by talking.
-
-These are not limitations to engineer around. They are the operating conditions. So the
-question is not "how do we help an agent understand the codebase?" — it is:
-
-> **What must be true of a codebase for it to be safely extensible by workers who will never
-> understand it?**
+Which means the useful question isn't "how do we help the agent understand the codebase." It's:
+what has to be true of a codebase for it to be safely extended by workers who will never
+understand it?
 
 ## The thesis
 
-> A codebase where **correctness is local** and **verification is structural**, so that an
-> unbounded number of forgetful, partially-sighted workers can extend it safely, in parallel,
-> indefinitely.
+Correctness should be local, and verification should be structural.
 
-The measure of success is not velocity in week one. It is whether **feature ten thousand is as
-safe to add as feature one** — and whether the tenth agent to touch a subsystem is as
-trustworthy as the first.
+Local, so an agent can be right about its slice without knowing the rest. Structural, so the
+checks can't be talked around by whoever is trying to finish. Get both and you can point an
+unbounded number of forgetful, half-blind workers at the thing and it survives.
 
-## Five problems
+The test isn't velocity in week one. It's whether feature ten thousand is as safe to add as
+feature one, and whether the tenth agent to touch your auth code is as trustworthy as the
+first.
 
-### 1. Correctness is global, and it needs to be local
+## What actually goes wrong
 
-In most codebases, changing X safely requires knowing about Y and Z. A human accumulates that
-map over years. An agent has minutes and 3% of the repo.
+### Correctness is global when it needs to be local
 
-The consequence is not that agents write bad code — it is that they write *locally plausible*
-code with non-local consequences. A query that forgets a tenant filter. A migration that
-breaks a deploy because the old version is still running. A cascade that deletes something
-three tables away.
+In most codebases, changing X safely means knowing about Y and Z. That's fine for someone
+who's been around two years and has the map in their head. It's hopeless for an agent holding
+3% of the repo.
 
-**Why the obvious fix fails.** "Document the invariants" doesn't work, because the agent
-doesn't know to look — the whole problem is that it doesn't know what it doesn't know.
+The failure mode isn't that agents write bad code. They write locally plausible code with
+non-local consequences — a query that forgets the tenant filter, a migration that breaks the
+deploy because the old version is still serving, a cascade that quietly empties a table three
+joins away. Every one of those looks fine in the diff.
 
-**The shape of a solution:** make the invariant impossible to violate *from inside the slice
-the agent can see.* If tenancy is a branded type that every query signature demands, an agent
-that has read none of your documentation still cannot write an unscoped query — the compiler
-refuses. The knowledge lives in the type, not in a person.
+"Write down the invariants" doesn't fix it, because the agent doesn't know to look. That's the
+whole problem: it doesn't know what it doesn't know.
 
-### 2. Verification is the bottleneck, and self-graded work doesn't count
+What does work is making the invariant unbreakable from inside the slice the agent *can* see.
+If tenancy is a branded type and every query signature demands it, then an agent that has read
+none of your docs still can't write an unscoped query. The compiler won't let it. The knowledge
+lives in the type rather than in someone's head, which means it's still there long after
+everyone who knew it has gone.
 
-Generation is cheap now. Knowing whether the output is right is the constraint, and a human
-reviewing everything is the thing that doesn't scale.
+### You can't grade your own homework
 
-The trap: "the agent writes tests" is self-graded homework. An agent that can weaken a check
-to make it pass will eventually do so, not from malice but because a failing check looks like
-an obstacle rather than information.
+Generating code is cheap now. Knowing whether it's right is the expensive part, and a human
+reviewing everything is exactly the thing that doesn't scale.
 
-**The shape of a solution:** verification the agent cannot satisfy by weakening it. Types,
-module resolution, database constraints — checks where the only way through is to be correct.
-And a **hard stop**: a gate wired into the agent's termination path, so finishing a turn on a
-broken repository is not possible rather than merely discouraged.
+So the obvious move is "have the agent write tests." Except the agent that wrote the code wrote
+the test, and if the test is in the way of finishing, it can be adjusted. Not out of malice —
+a failing check just looks like an obstacle rather than information.
 
-Two properties matter as much as the gate's existence. It must be **fast** — a slow gate gets
-disabled, so speed is a correctness property. And it must be **the same gate CI runs**, or the
-agent and the pipeline will disagree about reality.
+You need checks that can't be satisfied by weakening them. Types. Module resolution. Database
+constraints. Things where the only route through is to actually be correct. And then a hard
+stop wired into wherever the agent decides it's done, so that finishing on a broken repo isn't
+possible rather than merely frowned upon.
 
-### 3. Entropy from locally-reasonable choices
+Two things matter as much as having that gate. It has to be fast, because a slow gate is a gate
+somebody turns off — speed is a correctness property here, not a nicety. And it has to be the
+same gate CI runs, or your agent and your pipeline will disagree about whether the code works,
+which is its own special kind of afternoon.
 
-Session 1 puts authorization here. Session 400 puts it there. Neither is wrong. Together they
-are mud, and no single commit is the culprit.
+### A thousand reasonable decisions make an unreasonable codebase
 
-Human teams solve this with culture, review, and people who have been there a while. Agents
-have none of those. Convention held only by habit does not survive contributors with no
-memory.
+Session one puts authorisation here. Session four hundred puts it there. Neither is wrong.
+Together they're mud, and there's no single commit you can point at.
 
-**The shape of a solution:** conventions that are mechanically enforced, and *discoverable at
-the moment of writing* rather than at review. Two mechanisms, and both are needed:
+Human teams handle this with culture and review and people who've been around long enough to
+say "we don't do it that way." Agents have none of that. A convention held together by habit
+doesn't survive contributors with no memory.
 
-- **Structural** — if a package doesn't declare a dependency, importing it fails the build.
-  There is no comment that suppresses that. Physical enforcement beats procedural politeness.
-- **Contextual** — constraints scoped to paths, so the rules about schema design surface when
-  something touches the schema, and stay out of the way otherwise. Context spent reading
-  irrelevant instructions is context not spent on the problem.
+Two things help, and you need both. Structural enforcement: if a package doesn't declare a
+dependency, importing it fails the build, and there's no comment that makes that go away.
+Physical beats procedural every time. And contextual delivery: constraints attached to the
+paths they govern, so the rules about schema design show up when something touches the schema
+and stay quiet otherwise. Context spent reading irrelevant instructions is context not spent on
+the actual problem.
 
-### 4. The "why" evaporates — and this is the hard one
+### The why evaporates, and this is the hard one
 
-A codebase is a pile of decisions. Why is this column nullable? Why doesn't this cascade? Why
-is this apparently redundant check here?
+A codebase is a pile of decisions. Why is this column nullable? Why doesn't this one cascade?
+Why is there an apparently redundant check right here?
 
-A human asks someone. An agent has nobody, so it does the reasonable thing: it tidies up
-something load-bearing, and the failure appears three months later somewhere else.
+A person asks someone. An agent has nobody to ask, so it does the sensible thing and tidies up
+whatever looks redundant — and the consequence shows up three months later, somewhere else,
+looking like an unrelated bug.
 
-**Why the obvious fix fails.** Writing it down is necessary and nowhere near sufficient. Nobody
-reads fifty documents, least of all a worker optimising for the task in front of it. Worse,
-written knowledge decays — and a document that is confidently wrong is more dangerous than one
-that doesn't exist.
+Writing it down is necessary and nowhere near enough. Nobody reads fifty documents, least of
+all something optimising for the task in front of it. And written knowledge rots: a document
+that's confidently wrong is worse than one that doesn't exist, because now the agent acts on it.
 
-**The shape of a solution has two halves, and the second is the unsolved one:**
+There's a piece of this I think is tractable. Make every recorded lesson name the mechanism
+that stops it recurring — a test, a lint rule, a type — and fail the build if that mechanism
+isn't there. A lesson claiming enforcement it doesn't have is worse than one claiming none, so
+you put an integrity constraint on your own knowledge base. It also gives you a ladder worth
+following: a test beats a lint rule beats a hook beats a written rule beats a note in a file.
+"We should remember to" is where you end up when nothing better is available, not where you
+start.
 
-**Storage that cannot lie.** Every recorded lesson names the mechanism that prevents its
-recurrence — a test, a lint rule, a type — and the build fails if that mechanism is absent.
-A lesson claiming enforcement it does not have is worse than one claiming none. This turns a
-knowledge base into something with an integrity constraint, and gives a promotion ladder worth
-following: *a test beats a lint rule beats a hook beats a gate beats an example beats a
-written rule beats a note.* "We should remember to…" is the last resort, not the first.
+The other half I don't have a good answer for. Storage without retrieval is a filing cabinet.
+How does an arriving agent load the three decisions that bear on what it's about to change,
+without reading everything? Scoping rules by path is a crude proxy — it assumes relevance
+follows directory structure, which is often true and sometimes badly wrong. Something better
+probably exists. I don't know what it looks like yet.
 
-**Retrieval at the point of need.** Storage without retrieval is a filing cabinet. The
-open question is how an arriving agent loads exactly the relevant *why* — the three decisions
-that bear on what it is about to change — without reading everything. Path-scoped rules are a
-crude first version. A richer index over decisions, contracts and lessons is the obvious next
-step and is genuinely unsolved.
+### Two agents, two kinds of collision
 
-### 5. Collisions, physical and semantic
+The physical one is boring: two agents editing the same file. You mostly solve it with layout.
+If every feature owns its own schema file and its own package, concurrent work rarely lands in
+the same lines. Duller than a locking protocol, and it works better.
 
-Parallel agents fail in two different ways, and they need different answers.
+The semantic one is nastier. Agent B builds on a contract that agent A just changed. Both are
+individually correct, both pass their own checks, and the result doesn't work. Narrow
+interfaces that fail loudly help. So does admitting that some surfaces are genuinely shared and
+serialising work on those, rather than pretending everything parallelises.
 
-**Physical** — two agents editing the same file. Solvable by layout: if every feature owns its
-own schema file and its own package, concurrent work rarely touches the same lines. This is
-duller and more effective than a locking protocol.
+## What follows from all that
 
-**Semantic** — agent B builds on a contract agent A just changed. This one is nastier, because
-both agents are individually correct and the result still doesn't work. The mitigations are
-narrow interfaces that fail loudly when broken, and serialising the genuinely shared surfaces
-rather than pretending everything is parallelisable.
+A handful of principles, roughly in order of how much they buy you.
 
-## What follows
+Make invariants structural. If something really matters, it belongs in the compiler, the module
+system, or the database — not in prose that may never be read.
 
-The design principles that fall out of the above, in rough order of leverage:
+Make "done" executable, because a definition of done that's a judgement call will get judged
+generously by something that wants to stop.
 
-1. **Make invariants structural.** If it matters, it should be enforced by the compiler, the
-   module system, or the database — not by prose an agent may never read.
-2. **Make done executable.** A definition of done that is a judgement call will be judged
-   generously by something that wants to finish.
-3. **Keep the entry point short.** Context spent on instructions is context not spent on the
-   problem. Scope the rest to the paths where it applies.
-4. **Record why, with an integrity constraint.** Knowledge that can silently become false is a
-   liability, not an asset.
-5. **Prefer layout to protocol.** A file arrangement that makes collisions rare beats a
-   mechanism that resolves them.
-6. **Ship worked examples, not instructions.** A vertical slice that compiles teaches shape
-   faster than a page describing it — and it cannot drift, because it is in the build.
+Keep the entry point short and scope everything else to where it applies.
 
-## What this is not
+Record the why, and put an integrity constraint on it. Knowledge that can silently become false
+is a liability.
 
-**It is not a feature list.** Prebuilt subsystems earn their place by *establishing
-invariants* — multi-tenancy exists so that every query signature demands a scope, and the
-compiler then enforces that for code nobody has written yet. Read as a time-saver, the same
-code is just another starter.
+Prefer layout to protocol — an arrangement that makes collisions rare beats a mechanism for
+resolving them.
 
-**It is not a promise of autonomy.** None of this makes an agent trustworthy. It makes a
-codebase where an untrustworthy agent does less damage and gets corrected faster.
+Ship worked examples rather than instructions. A vertical slice that compiles teaches shape
+faster than a page describing it, and it can't drift, because it's in the build.
 
-**It is not finished thinking.** Retrieval of the *why* is genuinely open. So is proving that
-parallel agents hold up under real load rather than in principle.
+One thing worth being clear about: prebuilt subsystems are not the point, and reading them as
+a time-saver misses what they're for. Multi-tenancy shipped in the box isn't "saves you a
+week." It's there so that every query signature demands a scope, which means the compiler now
+enforces tenancy for code nobody has written yet. Same code, entirely different argument.
 
-## Open questions
+## What I'm still unsure about
 
-The honest list of what this thesis does not yet answer:
+None of this makes an agent trustworthy. It makes a codebase where an untrustworthy agent does
+less damage and gets caught sooner, which is a different and more achievable goal.
 
-- **How does an agent find the three decisions that matter** to the change it is making,
-  without reading everything? Path-scoping is a crude proxy for relevance.
-- **How is a decision retired?** A lesson that was true and no longer is has the same shape as
-  one that is still true.
-- **What is the right unit of parallelism?** A feature, a package, a file? Too coarse wastes
-  the labour; too fine reintroduces semantic collisions.
-- **Can documentation staleness be made structural**, the way lesson enforcement is — a check
-  that fails when a document describes a world that has moved?
-- **Does any of this hold at ten agents?** Everything above is reasoned from the properties of
-  the workers. Reasoning is not evidence.
+And a few things are genuinely open:
+
+How does an agent find the decisions that matter to the change it's making, without reading
+everything? How do you retire a decision — a lesson that was true and no longer is looks
+identical to one that still holds. What's the right unit of parallelism: a feature, a package,
+a file? Too coarse and you waste the labour, too fine and the semantic collisions come back.
+Can documentation staleness be made structural the way lesson enforcement can — some check that
+fails when a document describes a world that's moved on?
+
+And the big one: does any of this hold up at ten agents? Everything above is reasoned from the
+properties of the workers. Reasoning isn't evidence.
 
 ## License
 
