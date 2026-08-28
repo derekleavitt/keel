@@ -58,8 +58,17 @@ export async function buildAgenda(
   scope: Scope,
   timeZone: string,
   database: KeelDatabase = db(),
+  /**
+   * Treat this calendar day as "today".
+   *
+   * A page leaves it out and gets the wall clock. A **scheduled job must pass it**: the
+   * digest for the 15th has to describe the 15th even when the job runs late, or is
+   * retried on the 16th. Deriving "today" from the clock inside a background job means a
+   * retry silently produces a different email from the one that failed.
+   */
+  asOf?: string,
 ): Promise<Agenda> {
-  const today = todayIn(timeZone);
+  const today = asOf ?? todayIn(timeZone);
 
   const due = await listDueTodos(scope, today, database);
   if (due.length === 0) {

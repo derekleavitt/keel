@@ -37,3 +37,6 @@ pnpm-debug.log*
 .orchestration/RESUME.md
 .orchestration/status.md
 .claude/settings.local.json
+
+# Local mail written by the development email transport
+.keel/
