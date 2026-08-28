@@ -5,7 +5,7 @@ import { runJobs } from '@keel/jobs';
 import { createList } from '@keel/testbed-lists';
 import { createTodo } from '@keel/testbed-todos';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { reminderHandlers, scheduleDigest } from './digest.ts';
+import { DIGEST_SEND, type DigestSendPayload, reminderHandlers, scheduleDigest } from './digest.ts';
 
 /**
  * The digest, end to end: schedule, fan out, send.
@@ -129,20 +129,20 @@ describe('the daily digest', () => {
     // Fail exactly one recipient. This is why the digest fans out per user rather than
     // looping inside a single job: a failure is isolated, and its retry reaches only the
     // person it affected instead of re-sending to everyone already reached.
-    const failing = [
-      reminderHandlers[0]!,
-      {
-        ...reminderHandlers[1]!,
-        handle: async (
-          payload: { userId: string },
-          context: { database: typeof database; attempt: number },
-        ) => {
-          if (payload.userId === 'alice') throw new Error('provider rejected');
-          return reminderHandlers[1]!.handle(payload, context);
-        },
-      },
-    ];
-    const result = await runJobs(failing as typeof reminderHandlers, { database });
+    const failing = reminderHandlers.map((handler) =>
+      handler.kind !== DIGEST_SEND
+        ? handler
+        : {
+            ...handler,
+            handle: async (payload: unknown, context: Parameters<typeof handler.handle>[1]) => {
+              if ((payload as DigestSendPayload).userId === 'alice') {
+                throw new Error('provider rejected');
+              }
+              return handler.handle(payload as never, context);
+            },
+          },
+    );
+    const result = await runJobs(failing, { database });
 
     expect(result.processed).toBe(1);
     expect(result.failed).toBe(1);
