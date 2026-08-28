@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { userIdSchema } from './ids.ts';
 
+export * from './api-key.ts';
 export * from './attachment.ts';
 export * from './env.ts';
 export * from './ids.ts';

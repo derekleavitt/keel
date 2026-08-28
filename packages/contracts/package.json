@@ -10,7 +10,9 @@
     "./list": "./src/list.ts",
     "./tag": "./src/tag.ts",
     "./todo": "./src/todo.ts",
-    "./attachment": "./src/attachment.ts"
+    "./attachment": "./src/attachment.ts",
+    "./parse": "./src/parse.ts",
+    "./api-key": "./src/api-key.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

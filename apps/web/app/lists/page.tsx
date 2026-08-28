@@ -22,6 +22,9 @@ export default async function ListsPage() {
           <a href="/activity" className="text-sm text-accent underline underline-offset-4">
             Activity
           </a>
+          <a href="/settings/api-keys" className="text-sm text-accent underline underline-offset-4">
+            API keys
+          </a>
           <SignOutButton />
         </div>
       </header>
