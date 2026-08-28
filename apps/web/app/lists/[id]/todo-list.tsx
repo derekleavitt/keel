@@ -10,6 +10,7 @@ import {
 import { Button, useSerialMutations } from '@keel/ui';
 import { useRouter } from 'next/navigation';
 import { useOptimistic, useRef, useState } from 'react';
+import { Attachments } from './attachments.tsx';
 import { TodoDetail } from './todo-detail.tsx';
 import { type TagChip, TodoTags } from './todo-tags.tsx';
 
@@ -20,6 +21,7 @@ type Row = {
   dueDate: string | null;
   priority: TodoPriority;
   tags: TagChip[];
+  files: { id: string; filename: string; size: number }[];
 };
 
 export function TodoList({
@@ -27,10 +29,13 @@ export function TodoList({
   rows,
   allTags,
   filtered = false,
+  canEdit = true,
 }: {
   listId: string;
   rows: Row[];
   allTags: TagChip[];
+  /** False for a viewer: attachments render read-only rather than being hidden. */
+  canEdit?: boolean;
   /** True when a filter is narrowing. Changes what an empty result means. */
   filtered?: boolean;
 }) {
@@ -84,6 +89,25 @@ export function TodoList({
    * its own float can collide two rows or invent an order that does not exist. Dropping on
    * the row directly above means "take its place", so the anchor is the row before that.
    */
+  /**
+   * Move a todo one place, by button.
+   *
+   * Drag is an enhancement; this is the interface. Reordering that only works by dragging
+   * is unusable with a keyboard, unusable with a screen reader, and awkward on a phone —
+   * and it is the only path a test can drive deterministically, since HTML5 drag emulation
+   * varies by browser.
+   */
+  function move(id: string, direction: -1 | 1) {
+    const index = outstandingIds.indexOf(id);
+    const target = index + direction;
+    if (index === -1 || target < 0 || target >= outstandingIds.length) return;
+
+    const afterId =
+      target === 0 ? null : (outstandingIds[target - (direction > 0 ? 0 : 1)] ?? null);
+    setError(null);
+    enqueue(() => reorderTodoAction({ id, listId, afterId }));
+  }
+
   function drop(targetId: string) {
     if (!dragging || dragging === targetId) return;
 
@@ -138,13 +162,19 @@ export function TodoList({
       ) : (
         <>
           <ul className="flex flex-col gap-px overflow-hidden rounded-lg border border-line bg-line">
+            {/*
+             * The row is the drop *target*, but only the handle starts a drag.
+             *
+             * Making the whole row draggable broke as soon as it contained a file input:
+             * `<input type="file">` is a native drop target, so a drag landing anywhere
+             * near it never reached this handler. Links, checkboxes and selects have the
+             * same problem in milder forms — a row full of controls is an ambiguous thing
+             * to pick up.
+             */}
             {ordered.map((row) => (
               <li
                 key={row.id}
-                draggable={!row.done && !pending}
                 aria-label={`Reorder ${row.title}`}
-                onDragStart={() => setDragging(row.id)}
-                onDragEnd={() => setDragging(null)}
                 onDragOver={(event) => {
                   if (dragging && !row.done) event.preventDefault();
                 }}
@@ -158,6 +188,56 @@ export function TodoList({
                     : 'flex items-start gap-3 bg-surface px-4 py-3'
                 }
               >
+                {!row.done && (
+                  <span className="mt-0.5 flex flex-col">
+                    <button
+                      type="button"
+                      disabled={pending || outstandingIds.indexOf(row.id) === 0}
+                      aria-label={`Move ${row.title} up`}
+                      onClick={() => move(row.id, -1)}
+                      className="text-xs leading-none text-muted disabled:opacity-30"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      disabled={
+                        pending || outstandingIds.indexOf(row.id) === outstandingIds.length - 1
+                      }
+                      aria-label={`Move ${row.title} down`}
+                      onClick={() => move(row.id, 1)}
+                      className="text-xs leading-none text-muted disabled:opacity-30"
+                    >
+                      ▼
+                    </button>
+                  </span>
+                )}
+                {!row.done && (
+                  /*
+                   * A real button, not a styled span. It is focusable, it has a role, and
+                   * it can carry an accessible name — none of which a span with drag
+                   * handlers can. Dragging is the enhancement; the move buttons above are
+                   * the interface that works without a mouse.
+                   */
+                  <button
+                    type="button"
+                    draggable={!pending}
+                    aria-label={`Drag ${row.title}`}
+                    onDragStart={() => setDragging(row.id)}
+                    onDragEnd={() => setDragging(null)}
+                    onDragOver={(event) => {
+                      if (dragging) event.preventDefault();
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      drop(row.id);
+                    }}
+                    className="mt-1 cursor-grab select-none text-xs text-muted"
+                  >
+                    ⠿
+                  </button>
+                )}
                 <input
                   type="checkbox"
                   checked={row.done}
@@ -182,6 +262,12 @@ export function TodoList({
                     title={row.title}
                     dueDate={row.dueDate}
                     priority={row.priority}
+                  />
+                  <Attachments
+                    todoId={row.id}
+                    todoTitle={row.title}
+                    files={row.files}
+                    canEdit={canEdit}
                   />
                   <TodoTags
                     todoId={row.id}

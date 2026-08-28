@@ -10,7 +10,7 @@ import {
   positionBetween,
   visibleVia,
 } from '@keel/testbed-lists';
-import { and, asc, desc, eq, exists, ilike, inArray, lte, or, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, exists, ilike, inArray, lte, or, type SQL, sql } from 'drizzle-orm';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 
 /**
@@ -298,10 +298,32 @@ export async function reorderTodo(
   });
 }
 
+/**
+ * Delete a todo.
+ *
+ * Attachment rows go by cascade, which never touches storage — so their blobs are recorded
+ * as orphaned first, inside the same transaction. Doing it afterwards would mean a crash
+ * in between leaks files nothing will ever look for again.
+ *
+ * The orphan rows are written here rather than by `@keel/testbed-attachments` because a
+ * cascade gives that package no opportunity to run. The alternative — attachments
+ * subscribing to todo deletions — is a coupling with no mechanism behind it.
+ */
 export async function deleteTodo(scope: Scope, id: string, database: TodosDatabase = db()) {
-  const rows = await database
-    .delete(todo)
-    .where(editable(scope, eq(todo.id, id)))
-    .returning({ id: todo.id });
-  return rows.length > 0;
+  return database.transaction(async (tx) => {
+    const [owned] = await tx
+      .select({ id: todo.id })
+      .from(todo)
+      .where(editable(scope, eq(todo.id, id)))
+      .limit(1);
+    if (!owned) return false;
+
+    await tx.execute(sql`
+      insert into "orphaned_blob" ("storage_key", "created_at")
+      select "storage_key", now() from "attachment" where "todo_id" = ${id}
+      on conflict ("storage_key") do nothing
+    `);
+    await tx.delete(todo).where(eq(todo.id, id));
+    return true;
+  });
 }
