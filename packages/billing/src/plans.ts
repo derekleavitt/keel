@@ -12,7 +12,19 @@
 export const PLANS = {
   free: {
     label: 'Free',
-    seats: 1,
+    /*
+     * Three, not one.
+     *
+     * A one-seat free plan makes collaboration a paid feature — which is a legitimate way to
+     * sell software and the wrong default for a template. It also means every test of
+     * sharing, organizations or anything multi-user has to set up billing first, coupling
+     * unrelated features to it. Introducing that limit broke every sharing test at once,
+     * which was the suite correctly reporting a product decision made by accident.
+     *
+     * Small enough that the limit is still demonstrable — a fourth member is refused — and
+     * large enough that the feature it governs can be used without one.
+     */
+    seats: 3,
     lists: 3,
     storageBytes: 10 * 1024 * 1024,
     /** API requests per minute. Part of the plan, so it lives with the other allowances. */

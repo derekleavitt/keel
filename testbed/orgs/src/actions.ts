@@ -60,6 +60,18 @@ export async function inviteMemberAction(input: unknown) {
 
   const result = await addMember(scope, parsed.data);
   if (!result.ok) {
+    /*
+     * The seat message is built rather than looked up, because it carries the numbers — "no
+     * seats left" without saying how many there are is a message nobody can act on.
+     */
+    if (result.reason === 'no-seats') {
+      const seats = result.seats;
+      return {
+        ok: false as const,
+        error: `Your ${seats?.plan} plan includes ${seats?.limit} seats and ${seats?.used} are in use. Upgrade to invite more people.`,
+      };
+    }
+
     const messages = {
       'not-allowed': 'Only owners and admins can invite',
       'no-such-user': 'No account with that email',

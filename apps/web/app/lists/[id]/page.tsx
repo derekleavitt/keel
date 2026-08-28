@@ -103,10 +103,11 @@ export default async function ListPage({
         allTags={allTags.map(({ id, name, colour }) => ({ id, name, colour }))}
         filtered={isTodoFilterNarrowing(filter)}
         canEdit={role === 'owner' || role === 'editor'}
-        rows={todos.map(({ id, title, done, dueDate, priority }) => ({
+        rows={todos.map(({ id, title, done, notes, dueDate, priority }) => ({
           id,
           title,
           done,
+          notes,
           dueDate,
           priority,
           tags: tagsByTodo.get(id) ?? [],

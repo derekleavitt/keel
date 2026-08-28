@@ -18,6 +18,7 @@ type Row = {
   id: string;
   title: string;
   done: boolean;
+  notes: string | null;
   dueDate: string | null;
   priority: TodoPriority;
   tags: TagChip[];
@@ -265,6 +266,8 @@ export function TodoList({
                     title={row.title}
                     dueDate={row.dueDate}
                     priority={row.priority}
+                    notes={row.notes}
+                    canEdit={canEdit}
                   />
                   <Attachments
                     todoId={row.id}
