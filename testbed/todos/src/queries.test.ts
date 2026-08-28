@@ -1,5 +1,5 @@
-import type { UserId } from '@keel/contracts/ids';
-import { createTestDatabase, seedUser } from '@keel/db/testing';
+import type { Scope } from '@keel/contracts/ids';
+import { createTestDatabase, seedScope } from '@keel/db/testing';
 import { createList } from '@keel/testbed-lists';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -14,15 +14,15 @@ import {
 } from './queries.ts';
 
 let database: Awaited<ReturnType<typeof createTestDatabase>>;
-let owner: UserId;
-let stranger: UserId;
+let owner: Scope;
+let stranger: Scope;
 let ownerList: string;
 let strangerList: string;
 
 beforeEach(async () => {
   database = await createTestDatabase();
-  owner = (await seedUser(database, { id: 'owner' })).id as UserId;
-  stranger = (await seedUser(database, { id: 'stranger' })).id as UserId;
+  owner = (await seedScope(database, { id: 'owner' })).scope;
+  stranger = (await seedScope(database, { id: 'stranger' })).scope;
   ownerList = (await createList(owner, { name: 'Mine' }, database)).id;
   strangerList = (await createList(stranger, { name: 'Theirs' }, database)).id;
 });
@@ -31,7 +31,7 @@ afterEach(async () => {
   await database.close();
 });
 
-const titles = async (userId: UserId, listId: string) =>
+const titles = async (userId: Scope, listId: string) =>
   (await listTodos(userId, listId, {}, database)).map((row) => row.title);
 
 describe('quick add', () => {
@@ -123,7 +123,7 @@ describe('cascades', () => {
     const { eq } = await import('drizzle-orm');
 
     await createTodo(owner, { listId: ownerList, title: 'Doomed' }, database);
-    await database.delete(user).where(eq(user.id, owner));
+    await database.delete(user).where(eq(user.id, owner.userId));
     expect(await titles(owner, ownerList)).toEqual([]);
   });
 });

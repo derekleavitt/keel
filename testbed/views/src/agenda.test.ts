@@ -1,5 +1,5 @@
-import type { UserId } from '@keel/contracts/ids';
-import { createTestDatabase, seedUser } from '@keel/db/testing';
+import type { Scope } from '@keel/contracts/ids';
+import { createTestDatabase, seedScope } from '@keel/db/testing';
 import { createList } from '@keel/testbed-lists';
 import { attachTag, createTag } from '@keel/testbed-tags';
 import { createTodo, setTodoDone } from '@keel/testbed-todos';
@@ -11,8 +11,8 @@ import { buildAgenda } from './agenda.ts';
  * of the package existing. Nothing else in the repo reads across feature boundaries.
  */
 let database: Awaited<ReturnType<typeof createTestDatabase>>;
-let owner: UserId;
-let stranger: UserId;
+let owner: Scope;
+let stranger: Scope;
 let work: string;
 let home: string;
 
@@ -20,8 +20,8 @@ const UTC = 'UTC';
 
 beforeEach(async () => {
   database = await createTestDatabase();
-  owner = (await seedUser(database, { id: 'owner' })).id as UserId;
-  stranger = (await seedUser(database, { id: 'stranger' })).id as UserId;
+  owner = (await seedScope(database, { id: 'owner' })).scope;
+  stranger = (await seedScope(database, { id: 'stranger' })).scope;
   work = (await createList(owner, { name: 'Work' }, database)).id;
   home = (await createList(owner, { name: 'Home' }, database)).id;
 });

@@ -1,6 +1,5 @@
 'use server';
 
-import { requireUserId } from '@keel/auth/session';
 import {
   createTodoSchema,
   reorderTodoSchema,
@@ -8,6 +7,7 @@ import {
   updateTodoSchema,
 } from '@keel/contracts/todo';
 import { revalidatePath } from '@keel/runtime';
+import { requireScope } from '@keel/testbed-orgs/scope';
 
 /*
  * Revalidating `/lists` alone does NOT invalidate `/lists/[id]`. The write lands, the
@@ -21,59 +21,59 @@ import { createTodo, deleteTodo, reorderTodo, setTodoDone, updateTodo } from './
 
 /** Every export is a public endpoint: no helpers, no userId arguments, parse everything. */
 export async function createTodoAction(input: unknown) {
-  const userId = await requireUserId();
+  const scope = await requireScope();
   const parsed = createTodoSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false as const, error: parsed.error.issues[0]?.message ?? 'Invalid' };
   }
 
-  const row = await createTodo(userId, parsed.data);
+  const row = await createTodo(scope, parsed.data);
   if (!row) return { ok: false as const, error: 'List not found' };
   revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }
 
 export async function setTodoDoneAction(input: unknown) {
-  const userId = await requireUserId();
+  const scope = await requireScope();
   const parsed = setTodoDoneSchema.safeParse(input);
   if (!parsed.success) return { ok: false as const, error: 'Invalid' };
 
-  const row = await setTodoDone(userId, parsed.data.id, parsed.data.done);
+  const row = await setTodoDone(scope, parsed.data.id, parsed.data.done);
   if (!row) return { ok: false as const, error: 'Todo not found' };
   revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }
 
 export async function updateTodoAction(id: unknown, patch: unknown) {
-  const userId = await requireUserId();
+  const scope = await requireScope();
   if (typeof id !== 'string') return { ok: false as const, error: 'Invalid todo' };
   const parsed = updateTodoSchema.safeParse(patch);
   if (!parsed.success) {
     return { ok: false as const, error: parsed.error.issues[0]?.message ?? 'Invalid' };
   }
 
-  const row = await updateTodo(userId, id, parsed.data);
+  const row = await updateTodo(scope, id, parsed.data);
   if (!row) return { ok: false as const, error: 'Todo not found' };
   revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }
 
 export async function reorderTodoAction(input: unknown) {
-  const userId = await requireUserId();
+  const scope = await requireScope();
   const parsed = reorderTodoSchema.safeParse(input);
   if (!parsed.success) return { ok: false as const, error: 'Invalid move' };
 
-  const moved = await reorderTodo(userId, parsed.data);
+  const moved = await reorderTodo(scope, parsed.data);
   if (!moved) return { ok: false as const, error: 'Todo not found' };
   revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }
 
 export async function deleteTodoAction(id: unknown) {
-  const userId = await requireUserId();
+  const scope = await requireScope();
   if (typeof id !== 'string') return { ok: false as const, error: 'Invalid todo' };
 
-  const removed = await deleteTodo(userId, id);
+  const removed = await deleteTodo(scope, id);
   if (!removed) return { ok: false as const, error: 'Todo not found' };
   revalidatePath('/lists', 'layout');
   return { ok: true as const };

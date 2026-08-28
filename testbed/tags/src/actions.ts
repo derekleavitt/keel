@@ -1,6 +1,5 @@
 'use server';
 
-import { requireUserId } from '@keel/auth/session';
 import {
   createTagSchema,
   tagAssignmentSchema,
@@ -8,6 +7,7 @@ import {
   updateTagSchema,
 } from '@keel/contracts/tag';
 import { revalidatePath } from '@keel/runtime';
+import { requireScope } from '@keel/testbed-orgs/scope';
 
 /*
  * Revalidating `/lists` alone does NOT invalidate `/lists/[id]`. The write lands, the
@@ -27,25 +27,25 @@ import { attachTag, createTag, deleteTag, detachTag, tagTodoByName, updateTag } 
  * See `.claude/rules/server-actions.md`.
  */
 export async function createTagAction(input: unknown) {
-  const userId = await requireUserId();
+  const scope = await requireScope();
   const parsed = createTagSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false as const, error: parsed.error.issues[0]?.message ?? 'Invalid' };
 
-  const row = await createTag(userId, parsed.data);
+  const row = await createTag(scope, parsed.data);
   if (!row) return { ok: false as const, error: 'You already have a tag with that name' };
   revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }
 
 export async function updateTagAction(id: unknown, patch: unknown) {
-  const userId = await requireUserId();
+  const scope = await requireScope();
   if (typeof id !== 'string') return { ok: false as const, error: 'Invalid tag' };
   const parsed = updateTagSchema.safeParse(patch);
   if (!parsed.success)
     return { ok: false as const, error: parsed.error.issues[0]?.message ?? 'Invalid' };
 
-  const row = await updateTag(userId, id, parsed.data);
+  const row = await updateTag(scope, id, parsed.data);
   if (!row) return { ok: false as const, error: 'Tag not found' };
   revalidatePath('/lists', 'layout');
   return { ok: true as const };
@@ -57,32 +57,32 @@ export async function updateTagAction(id: unknown, patch: unknown) {
  * `testbed/tags/src/queries.test.ts` is what proves it.
  */
 export async function deleteTagAction(id: unknown) {
-  const userId = await requireUserId();
+  const scope = await requireScope();
   if (typeof id !== 'string') return { ok: false as const, error: 'Invalid tag' };
 
-  const removed = await deleteTag(userId, id);
+  const removed = await deleteTag(scope, id);
   if (!removed) return { ok: false as const, error: 'Tag not found' };
   revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }
 
 export async function attachTagAction(input: unknown) {
-  const userId = await requireUserId();
+  const scope = await requireScope();
   const parsed = tagAssignmentSchema.safeParse(input);
   if (!parsed.success) return { ok: false as const, error: 'Invalid tag assignment' };
 
-  const attached = await attachTag(userId, parsed.data);
+  const attached = await attachTag(scope, parsed.data);
   if (!attached) return { ok: false as const, error: 'Todo or tag not found' };
   revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }
 
 export async function detachTagAction(input: unknown) {
-  const userId = await requireUserId();
+  const scope = await requireScope();
   const parsed = tagAssignmentSchema.safeParse(input);
   if (!parsed.success) return { ok: false as const, error: 'Invalid tag assignment' };
 
-  const detached = await detachTag(userId, parsed.data);
+  const detached = await detachTag(scope, parsed.data);
   if (!detached) return { ok: false as const, error: 'That todo is not tagged with that tag' };
   revalidatePath('/lists', 'layout');
   return { ok: true as const };
@@ -90,12 +90,12 @@ export async function detachTagAction(input: unknown) {
 
 /** Inline creation: one round trip creates the tag if needed and attaches it. */
 export async function tagTodoByNameAction(input: unknown) {
-  const userId = await requireUserId();
+  const scope = await requireScope();
   const parsed = tagTodoByNameSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false as const, error: parsed.error.issues[0]?.message ?? 'Invalid' };
 
-  const row = await tagTodoByName(userId, parsed.data);
+  const row = await tagTodoByName(scope, parsed.data);
   if (!row) return { ok: false as const, error: 'Todo not found' };
   revalidatePath('/lists', 'layout');
   return { ok: true as const };

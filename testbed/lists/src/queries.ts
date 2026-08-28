@@ -1,4 +1,4 @@
-import type { UserId } from '@keel/contracts/ids';
+import type { Scope } from '@keel/contracts/ids';
 import { db, type KeelDatabase } from '@keel/db';
 import { list } from '@keel/db/schema';
 import { and, asc, eq, type SQL } from 'drizzle-orm';
@@ -22,37 +22,38 @@ export type ListsDatabase = KeelDatabase;
  * Reads use visibility (owned or shared); writes use ownership or an editor grant.
  * Both come from `./access.ts` so the rule exists in exactly one place.
  */
-function visible(userId: UserId, ...narrowing: (SQL | undefined)[]): SQL {
-  const scope = visibleVia(list.id, userId);
-  return and(scope, ...narrowing) ?? scope;
+function visible(scope: Scope, ...narrowing: (SQL | undefined)[]): SQL {
+  const predicate = visibleVia(list.id, scope);
+  return and(predicate, ...narrowing) ?? predicate;
 }
 
-export async function listLists(userId: UserId, database: ListsDatabase = db()) {
-  return database.select().from(list).where(visible(userId)).orderBy(asc(list.position));
+export async function listLists(scope: Scope, database: ListsDatabase = db()) {
+  return database.select().from(list).where(visible(scope)).orderBy(asc(list.position));
 }
 
-export async function getList(userId: UserId, id: string, database: ListsDatabase = db()) {
+export async function getList(scope: Scope, id: string, database: ListsDatabase = db()) {
   const [row] = await database
     .select()
     .from(list)
-    .where(visible(userId, eq(list.id, id)))
+    .where(visible(scope, eq(list.id, id)))
     .limit(1);
   return row ?? null;
 }
 
 export async function createList(
-  userId: UserId,
+  scope: Scope,
   input: { name: string; colour?: string | null },
   database: ListsDatabase = db(),
 ) {
-  const existing = await listLists(userId, database);
+  const existing = await listLists(scope, database);
   const last = existing.at(-1)?.position ?? null;
 
   const [row] = await database
     .insert(list)
     .values({
       id: `lst_${crypto.randomUUID()}`,
-      userId,
+      userId: scope.userId,
+      organizationId: scope.organizationId,
       name: input.name,
       colour: input.colour ?? null,
       position: positionBetween(last, null),
@@ -63,7 +64,7 @@ export async function createList(
 }
 
 export async function updateList(
-  userId: UserId,
+  scope: Scope,
   id: string,
   patch: { name?: string; colour?: string | null },
   database: ListsDatabase = db(),
@@ -72,16 +73,16 @@ export async function updateList(
     .update(list)
     .set({ ...patch, updatedAt: new Date() })
     // Renaming is an owner action: an editor may change what is in a list, not the list.
-    .where(ownedByUser(userId, eq(list.id, id)))
+    .where(ownedByUser(scope, eq(list.id, id)))
     .returning();
   return row ?? null;
 }
 
 /** Returns whether a row was removed, so callers can tell "gone" from "not yours". */
-export async function deleteList(userId: UserId, id: string, database: ListsDatabase = db()) {
+export async function deleteList(scope: Scope, id: string, database: ListsDatabase = db()) {
   const rows = await database
     .delete(list)
-    .where(ownedByUser(userId, eq(list.id, id)))
+    .where(ownedByUser(scope, eq(list.id, id)))
     .returning({ id: list.id });
   return rows.length > 0;
 }
@@ -94,7 +95,7 @@ export async function deleteList(userId: UserId, id: string, database: ListsData
  * partially reordered list.
  */
 export async function reorderList(
-  userId: UserId,
+  scope: Scope,
   input: { id: string; afterId: string | null },
   database: ListsDatabase = db(),
 ) {
@@ -102,7 +103,7 @@ export async function reorderList(
     const ordered = await tx
       .select({ id: list.id, position: list.position })
       .from(list)
-      .where(ownedByUser(userId))
+      .where(ownedByUser(scope))
       .orderBy(asc(list.position));
 
     if (!ordered.some((row) => row.id === input.id)) return false;
@@ -113,7 +114,7 @@ export async function reorderList(
       await tx
         .update(list)
         .set({ position: positionBetween(before, after), updatedAt: new Date() })
-        .where(ownedByUser(userId, eq(list.id, input.id)));
+        .where(ownedByUser(scope, eq(list.id, input.id)));
       return true;
     } catch (error) {
       if (!(error instanceof PositionExhaustedError)) throw error;
@@ -132,7 +133,7 @@ export async function reorderList(
       await tx
         .update(list)
         .set({ position, updatedAt: new Date() })
-        .where(ownedByUser(userId, eq(list.id, row.id)));
+        .where(ownedByUser(scope, eq(list.id, row.id)));
     }
     return true;
   });

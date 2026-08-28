@@ -3,6 +3,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
 import { PGlite } from '@electric-sql/pglite';
+import type { Scope } from '@keel/contracts/ids';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 import { getTableConfig } from 'drizzle-orm/pg-core';
 import { drizzle as proxyDrizzle } from 'drizzle-orm/pg-proxy';
@@ -171,6 +172,61 @@ export function queryBuilder() {
     },
     { schema },
   ) as unknown as PgDatabase<PgQueryResultHKT, typeof schema>;
+}
+
+/**
+ * Seed a user together with their personal organization, and return a ready `Scope`.
+ *
+ * Almost every query now takes a `Scope`, so almost every test needs one. Building it by
+ * hand in each suite would mean each suite inventing its own tenancy setup — and a test
+ * that constructs a scope without a real membership row proves less than it appears to,
+ * because production can only obtain one through a membership check.
+ */
+export async function seedScope(
+  database: TestDatabase,
+  overrides: { id?: string; email?: string; name?: string } = {},
+) {
+  const row = await seedUser(database, overrides);
+  const organizationId = `org_${row.id}`;
+
+  await database.insert(schema.organization).values({
+    id: organizationId,
+    name: `${row.name}'s workspace`,
+    slug: `personal-${row.id}`,
+    personal: row.id,
+  });
+  await database.insert(schema.membership).values({
+    organizationId,
+    userId: row.id,
+    role: 'owner',
+  });
+
+  return {
+    user: row,
+    scope: { userId: row.id, organizationId } as Scope,
+  };
+}
+
+/** A second organization both users belong to — for testing tenancy, not sharing. */
+export async function seedSharedOrganization(
+  database: TestDatabase,
+  userIds: string[],
+  name = 'Shared workspace',
+) {
+  const organizationId = `org_shared_${Math.random().toString(36).slice(2, 8)}`;
+  await database.insert(schema.organization).values({
+    id: organizationId,
+    name,
+    slug: organizationId,
+  });
+  for (const [index, userId] of userIds.entries()) {
+    await database.insert(schema.membership).values({
+      organizationId,
+      userId,
+      role: index === 0 ? 'owner' : 'member',
+    });
+  }
+  return (userId: string) => ({ userId, organizationId }) as Scope;
 }
 
 /** Skip PGlite-backed suites when a platform cannot run WASM Postgres. */

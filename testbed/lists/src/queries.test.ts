@@ -1,5 +1,5 @@
-import type { UserId } from '@keel/contracts/ids';
-import { createTestDatabase, seedUser } from '@keel/db/testing';
+import type { Scope } from '@keel/contracts/ids';
+import { createTestDatabase, seedScope } from '@keel/db/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { POSITION_STEP } from './position.ts';
 import { createList, deleteList, getList, listLists, reorderList, updateList } from './queries.ts';
@@ -9,20 +9,20 @@ import { createList, deleteList, getList, listLists, reorderList, updateList } f
  * them for a stranger passes every single-user test ever written.
  */
 let database: Awaited<ReturnType<typeof createTestDatabase>>;
-let owner: UserId;
-let stranger: UserId;
+let owner: Scope;
+let stranger: Scope;
 
 beforeEach(async () => {
   database = await createTestDatabase();
-  owner = (await seedUser(database, { id: 'owner' })).id as UserId;
-  stranger = (await seedUser(database, { id: 'stranger' })).id as UserId;
+  owner = (await seedScope(database, { id: 'owner' })).scope;
+  stranger = (await seedScope(database, { id: 'stranger' })).scope;
 });
 
 afterEach(async () => {
   await database.close();
 });
 
-const names = async (userId: UserId) => (await listLists(userId, database)).map((row) => row.name);
+const names = async (userId: Scope) => (await listLists(userId, database)).map((row) => row.name);
 
 describe('ownership', () => {
   it('lists only the caller’s rows', async () => {

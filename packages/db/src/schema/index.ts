@@ -17,16 +17,19 @@
  */
 export * from './auth.ts';
 export * from './list.ts';
+export * from './organization.ts';
 export * from './tag.ts';
 export * from './todo.ts';
 
 import { authTables } from './auth.ts';
 import { listTables } from './list.ts';
+import { organizationTables } from './organization.ts';
 import { tagTables } from './tag.ts';
 import { todoTables } from './todo.ts';
 
 export const schema = {
   ...authTables,
+  ...organizationTables,
   ...listTables,
   ...todoTables,
   ...tagTables,

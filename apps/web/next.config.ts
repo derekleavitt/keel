@@ -30,6 +30,7 @@ const config: NextConfig = {
     '@keel/runtime',
     '@keel/testbed-views',
     '@keel/testbed-lists',
+    '@keel/testbed-orgs',
     '@keel/testbed-tags',
     '@keel/testbed-todos',
   ],

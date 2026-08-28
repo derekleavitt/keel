@@ -1,5 +1,6 @@
 import { index, pgTable, primaryKey, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { user } from './auth.ts';
+import { organization } from './organization.ts';
 import { todo } from './todo.ts';
 
 /**
@@ -35,6 +36,10 @@ export const tag = pgTable(
   'tag',
   {
     id: text('id').primaryKey(),
+    /** The tenant this row belongs to. Nothing is ever visible across two. */
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),

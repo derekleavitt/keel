@@ -1,4 +1,4 @@
-import type { UserId } from '@keel/contracts/ids';
+import type { Scope } from '@keel/contracts/ids';
 import { db, type KeelDatabase } from '@keel/db';
 import { list, listShare } from '@keel/db/schema';
 import { and, eq, inArray, type SQL, sql } from 'drizzle-orm';
@@ -24,22 +24,39 @@ import type { AnyPgColumn } from 'drizzle-orm/pg-core';
  * one query ends up subtly more permissive than the rest.
  */
 
-/** Lists the user may read: their own, plus anything shared with them at any level. */
-export function visibleListIds(userId: UserId) {
+/**
+ * Lists the caller may read: their own, plus anything shared with them — **within the
+ * active organization only.**
+ *
+ * The tenant filter is on the inner selects rather than applied afterwards, so a share
+ * that somehow pointed across tenants still could not widen the result. Tenancy is not a
+ * refinement of ownership here; it is the outer boundary that ownership operates inside.
+ */
+export function visibleListIds(scope: Scope) {
   return sql<string>`(
-    select ${list.id} from ${list} where ${list.userId} = ${userId}
+    select ${list.id} from ${list}
+      where ${list.userId} = ${scope.userId}
+        and ${list.organizationId} = ${scope.organizationId}
     union
-    select ${listShare.listId} from ${listShare} where ${listShare.userId} = ${userId}
+    select ${listShare.listId} from ${listShare}
+      join ${list} on ${list.id} = ${listShare.listId}
+      where ${listShare.userId} = ${scope.userId}
+        and ${list.organizationId} = ${scope.organizationId}
   )`;
 }
 
-/** Lists the user may change: their own, plus anything shared at editor level. */
-export function editableListIds(userId: UserId) {
+/** Lists the caller may change: their own, plus editor grants, within the active tenant. */
+export function editableListIds(scope: Scope) {
   return sql<string>`(
-    select ${list.id} from ${list} where ${list.userId} = ${userId}
+    select ${list.id} from ${list}
+      where ${list.userId} = ${scope.userId}
+        and ${list.organizationId} = ${scope.organizationId}
     union
     select ${listShare.listId} from ${listShare}
-      where ${listShare.userId} = ${userId} and ${listShare.role} = 'editor'
+      join ${list} on ${list.id} = ${listShare.listId}
+      where ${listShare.userId} = ${scope.userId}
+        and ${listShare.role} = 'editor'
+        and ${list.organizationId} = ${scope.organizationId}
   )`;
 }
 
@@ -51,12 +68,12 @@ export function editableListIds(userId: UserId) {
  * predicate. Narrowing this to one table would push every other caller into re-deriving
  * the rule, which is exactly what this module exists to prevent.
  */
-export function visibleVia(column: AnyPgColumn, userId: UserId): SQL {
-  return sql`${column} in ${visibleListIds(userId)}`;
+export function visibleVia(column: AnyPgColumn, scope: Scope): SQL {
+  return sql`${column} in ${visibleListIds(scope)}`;
 }
 
-export function editableVia(column: AnyPgColumn, userId: UserId): SQL {
-  return sql`${column} in ${editableListIds(userId)}`;
+export function editableVia(column: AnyPgColumn, scope: Scope): SQL {
+  return sql`${column} in ${editableListIds(scope)}`;
 }
 
 /**
@@ -65,41 +82,58 @@ export function editableVia(column: AnyPgColumn, userId: UserId): SQL {
  * An editor can change what is *in* a list but not who else can see it — otherwise a grant
  * silently becomes the power to hand the list to anyone.
  */
-export function ownedByUser(userId: UserId, ...narrowing: (SQL | undefined)[]): SQL {
-  const owner = eq(list.userId, userId);
+export function ownedByUser(scope: Scope, ...narrowing: (SQL | undefined)[]): SQL {
+  const owner = and(
+    eq(list.userId, scope.userId),
+    eq(list.organizationId, scope.organizationId),
+  ) as SQL;
   return and(owner, ...narrowing) ?? owner;
 }
 
 /** The caller's role on a list: owner, their grant, or null if they cannot see it. */
 export async function roleOnList(
-  userId: UserId,
+  scope: Scope,
   listId: string,
   database: KeelDatabase = db(),
 ): Promise<'owner' | 'editor' | 'viewer' | null> {
   const [owned] = await database
     .select({ id: list.id })
     .from(list)
-    .where(and(eq(list.id, listId), eq(list.userId, userId)))
+    .where(
+      and(
+        eq(list.id, listId),
+        eq(list.userId, scope.userId),
+        eq(list.organizationId, scope.organizationId),
+      ),
+    )
     .limit(1);
   if (owned) return 'owner';
 
+  // The join enforces tenancy: a grant on a list in another organization cannot resolve.
   const [share] = await database
     .select({ role: listShare.role })
     .from(listShare)
-    .where(and(eq(listShare.listId, listId), eq(listShare.userId, userId)))
+    .innerJoin(list, eq(list.id, listShare.listId))
+    .where(
+      and(
+        eq(listShare.listId, listId),
+        eq(listShare.userId, scope.userId),
+        eq(list.organizationId, scope.organizationId),
+      ),
+    )
     .limit(1);
   return share?.role ?? null;
 }
 
 /** Ids the caller may read, materialised — for callers that need a list rather than a predicate. */
 export async function readableListIds(
-  userId: UserId,
+  scope: Scope,
   database: KeelDatabase = db(),
 ): Promise<string[]> {
   const rows = await database
     .select({ id: list.id })
     .from(list)
-    .where(sql`${list.id} in ${visibleListIds(userId)}`);
+    .where(sql`${list.id} in ${visibleListIds(scope)}`);
   return rows.map((row) => row.id);
 }
 

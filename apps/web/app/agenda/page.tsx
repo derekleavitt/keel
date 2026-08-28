@@ -1,4 +1,5 @@
 import { requireUserOrRedirect } from '@keel/auth/session';
+import { requireScopeOrRedirect } from '@keel/testbed-orgs/scope';
 import { buildAgenda } from '@keel/testbed-views';
 import Link from 'next/link';
 import { SignOutButton } from '../sign-out-button.tsx';
@@ -8,10 +9,11 @@ import { AgendaView } from './agenda-view.tsx';
 export const dynamic = 'force-dynamic';
 
 export default async function AgendaPage() {
+  const scope = await requireScopeOrRedirect('/agenda');
   const user = await requireUserOrRedirect('/agenda');
   // Rendered in UTC first so there is something on screen immediately; the client
   // re-reads it for the real timezone.
-  const initial = await buildAgenda(user.id, 'UTC');
+  const initial = await buildAgenda(scope, 'UTC');
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-8 px-6 py-16">

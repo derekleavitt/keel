@@ -1,4 +1,4 @@
-import type { UserId } from '@keel/contracts/ids';
+import type { OrganizationId, Scope, UserId } from '@keel/contracts/ids';
 import type { TodoFilter } from '@keel/contracts/todo';
 import { queryBuilder } from '@keel/db/testing';
 import { PgDialect } from 'drizzle-orm/pg-core';
@@ -17,7 +17,10 @@ import { buildTodoListQuery, escapeLikePattern } from './queries.ts';
  */
 const dialect = new PgDialect();
 const database = queryBuilder();
-const userId = 'usr_scope_probe' as UserId;
+const scope: Scope = {
+  userId: 'usr_scope_probe' as UserId,
+  organizationId: 'org_scope_probe' as OrganizationId,
+};
 
 /** Every subset of the available filters. 2^4 = 16 combinations. */
 function allFilterCombinations(): TodoFilter[] {
@@ -51,7 +54,7 @@ describe('user scoping survives every filter combination', () => {
 
     it(`scopes by user_id with ${label}`, () => {
       const { sql } = dialect.sqlToQuery(
-        buildTodoListQuery(userId, 'lst_probe', filter, database).getSQL(),
+        buildTodoListQuery(scope, 'lst_probe', filter, database).getSQL(),
       );
       expect(sql).toContain('"user_id" =');
     });
@@ -61,7 +64,7 @@ describe('user scoping survives every filter combination', () => {
     // An inlined value is an injection waiting to happen. Drizzle parameterises, and this
     // asserts that it stays that way.
     const { sql, params } = dialect.sqlToQuery(
-      buildTodoListQuery(userId, 'lst_probe', { tagIds: ["' or 1=1 --"] }, database).getSQL(),
+      buildTodoListQuery(scope, 'lst_probe', { tagIds: ["' or 1=1 --"] }, database).getSQL(),
     );
     expect(sql).not.toContain('1=1');
     expect(params).toContain("' or 1=1 --");
@@ -88,7 +91,7 @@ describe('LIKE pattern escaping', () => {
   it('keeps a wildcard search literal in the rendered SQL', () => {
     // A search for "50%" must not match everything beginning with "50".
     const { params } = dialect.sqlToQuery(
-      buildTodoListQuery(userId, 'lst_probe', {}, database).getSQL(),
+      buildTodoListQuery(scope, 'lst_probe', {}, database).getSQL(),
     );
     expect(params).not.toContain('50%');
   });

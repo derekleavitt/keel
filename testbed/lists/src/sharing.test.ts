@@ -1,5 +1,5 @@
-import type { UserId } from '@keel/contracts/ids';
-import { createTestDatabase, seedUser } from '@keel/db/testing';
+import type { Scope } from '@keel/contracts/ids';
+import { createTestDatabase, seedScope, seedSharedOrganization } from '@keel/db/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { roleOnList } from './access.ts';
 import { createList, deleteList, getList, listLists, updateList } from './queries.ts';
@@ -12,16 +12,30 @@ import { listShares, revokeShare, shareList } from './sharing.ts';
  * reach its recipient are both failures, and a two-actor test catches only one of them.
  */
 let database: Awaited<ReturnType<typeof createTestDatabase>>;
-let owner: UserId;
-let friend: UserId;
-let stranger: UserId;
+let owner: Scope;
+let friend: Scope;
+let stranger: Scope;
 let listId: string;
 
 beforeEach(async () => {
   database = await createTestDatabase();
-  owner = (await seedUser(database, { id: 'owner', email: 'owner@example.test' })).id as UserId;
-  friend = (await seedUser(database, { id: 'friend', email: 'friend@example.test' })).id as UserId;
-  stranger = (await seedUser(database, { id: 'stranger', email: 's@example.test' })).id as UserId;
+
+  // All three are in one organization. Sharing operates *inside* a tenant, so a grant to
+  // someone in a different organization is not a weaker share — it is impossible, and the
+  // cross-tenant case is covered separately in tenancy.test.ts.
+  const ownerSeed = await seedScope(database, { id: 'owner', email: 'owner@example.test' });
+  const friendSeed = await seedScope(database, { id: 'friend', email: 'friend@example.test' });
+  const strangerSeed = await seedScope(database, { id: 'stranger', email: 's@example.test' });
+
+  const inOrg = await seedSharedOrganization(database, [
+    ownerSeed.user.id,
+    friendSeed.user.id,
+    strangerSeed.user.id,
+  ]);
+  owner = inOrg(ownerSeed.user.id);
+  friend = inOrg(friendSeed.user.id);
+  stranger = inOrg(strangerSeed.user.id);
+
   listId = (await createList(owner, { name: 'Shared' }, database)).id;
 });
 
@@ -107,7 +121,7 @@ describe('revoking', () => {
     await share('editor');
     expect(await getList(friend, listId, database)).not.toBeNull();
 
-    expect(await revokeShare(owner, { listId, userId: friend }, database)).toBe(true);
+    expect(await revokeShare(owner, { listId, userId: friend.userId }, database)).toBe(true);
 
     // The predicates are subqueries evaluated per statement, so there is no cached id list
     // still being trusted after the grant is gone.
@@ -117,12 +131,12 @@ describe('revoking', () => {
 
   it('only the owner may revoke', async () => {
     await share('editor');
-    expect(await revokeShare(friend, { listId, userId: friend }, database)).toBe(false);
+    expect(await revokeShare(friend, { listId, userId: friend.userId }, database)).toBe(false);
     expect(await getList(friend, listId, database)).not.toBeNull();
   });
 
   it('reports honestly when there was nothing to revoke', async () => {
-    expect(await revokeShare(owner, { listId, userId: stranger }, database)).toBe(false);
+    expect(await revokeShare(owner, { listId, userId: stranger.userId }, database)).toBe(false);
   });
 
   it('deleting the list removes its grants', async () => {

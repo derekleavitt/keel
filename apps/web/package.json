@@ -15,6 +15,7 @@
     "@keel/contracts": "workspace:*",
     "@keel/db": "workspace:*",
     "@keel/testbed-lists": "workspace:*",
+    "@keel/testbed-orgs": "workspace:*",
     "@keel/testbed-tags": "workspace:*",
     "@keel/testbed-todos": "workspace:*",
     "@keel/testbed-views": "workspace:*",

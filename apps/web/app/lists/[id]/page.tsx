@@ -1,6 +1,6 @@
-import { requireUserOrRedirect } from '@keel/auth/session';
 import { isTodoFilterNarrowing, type TodoFilter, todoFilterSchema } from '@keel/contracts/todo';
 import { getList, listShares, roleOnList } from '@keel/testbed-lists';
+import { requireScopeOrRedirect } from '@keel/testbed-orgs/scope';
 import { listTags, listTagsForTodos } from '@keel/testbed-tags';
 import { listTodos } from '@keel/testbed-todos';
 import Link from 'next/link';
@@ -32,25 +32,25 @@ export default async function ListPage({
 }) {
   const { id } = await params;
   const filter = readFilter(await searchParams);
-  const user = await requireUserOrRedirect('/lists');
+  const scope = await requireScopeOrRedirect('/lists');
 
-  const list = await getList(user.id, id);
+  const list = await getList(scope, id);
   if (!list) notFound();
 
   const [todos, role, shares] = await Promise.all([
-    listTodos(user.id, id, filter),
-    roleOnList(user.id, id),
-    listShares(user.id, id),
+    listTodos(scope, id, filter),
+    roleOnList(scope, id),
+    listShares(scope, id),
   ]);
   // One query for every row's tags rather than one per row, and one for the suggestions
   // offered by the inline tag input. Tags are global to the user, so the second is not
   // scoped to this list.
   const [tagsByTodo, allTags] = await Promise.all([
     listTagsForTodos(
-      user.id,
+      scope,
       todos.map((row) => row.id),
     ),
-    listTags(user.id),
+    listTags(scope),
   ]);
 
   return (

@@ -1,6 +1,6 @@
-import type { UserId } from '@keel/contracts/ids';
+import type { Scope } from '@keel/contracts/ids';
 import { tag, todo, todoTag } from '@keel/db/schema';
-import { createTestDatabase, seedUser } from '@keel/db/testing';
+import { createTestDatabase, seedScope } from '@keel/db/testing';
 import { createList } from '@keel/testbed-lists';
 import { createTodo, deleteTodo, getTodo } from '@keel/testbed-todos';
 import { eq } from 'drizzle-orm';
@@ -21,8 +21,8 @@ import {
 } from './queries.ts';
 
 let database: Awaited<ReturnType<typeof createTestDatabase>>;
-let owner: UserId;
-let stranger: UserId;
+let owner: Scope;
+let stranger: Scope;
 /** Two lists for the owner, because the point of a tag is that it spans them. */
 let work: string;
 let home: string;
@@ -30,8 +30,8 @@ let strangerList: string;
 
 beforeEach(async () => {
   database = await createTestDatabase();
-  owner = (await seedUser(database, { id: 'owner' })).id as UserId;
-  stranger = (await seedUser(database, { id: 'stranger' })).id as UserId;
+  owner = (await seedScope(database, { id: 'owner' })).scope;
+  stranger = (await seedScope(database, { id: 'stranger' })).scope;
   work = (await createList(owner, { name: 'Work' }, database)).id;
   home = (await createList(owner, { name: 'Home' }, database)).id;
   strangerList = (await createList(stranger, { name: 'Theirs' }, database)).id;
@@ -41,7 +41,7 @@ afterEach(async () => {
   await database.close();
 });
 
-async function makeTodo(userId: UserId, listId: string, title: string) {
+async function makeTodo(userId: Scope, listId: string, title: string) {
   const row = await createTodo(userId, { listId, title }, database);
   if (!row) throw new Error(`setup failed to create ${title}`);
   return row;
@@ -270,6 +270,8 @@ describe('cross-user isolation', () => {
     expect(await detachTag(stranger, { todoId: deploy.id, tagId: urgent.id }, database)).toBe(
       false,
     );
-    expect(await database.select().from(todoTag).where(eq(todoTag.userId, owner))).toHaveLength(1);
+    expect(
+      await database.select().from(todoTag).where(eq(todoTag.userId, owner.userId)),
+    ).toHaveLength(1);
   });
 });

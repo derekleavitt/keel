@@ -1,4 +1,4 @@
-import type { UserId } from '@keel/contracts/ids';
+import type { Scope } from '@keel/contracts/ids';
 import type { TodoPriority } from '@keel/contracts/todo';
 import { db, type KeelDatabase } from '@keel/db';
 import { listLists } from '@keel/testbed-lists';
@@ -55,22 +55,22 @@ export interface Agenda {
  * PRD names as "correct at midnight without a refresh".
  */
 export async function buildAgenda(
-  userId: UserId,
+  scope: Scope,
   timeZone: string,
   database: KeelDatabase = db(),
 ): Promise<Agenda> {
   const today = todayIn(timeZone);
 
-  const due = await listDueTodos(userId, today, database);
+  const due = await listDueTodos(scope, today, database);
   if (due.length === 0) {
     return { today, overdue: [], dueToday: [], empty: true };
   }
 
   // Two batched lookups rather than one per todo. Each feature answers for its own tables.
   const [lists, tagsByTodo] = await Promise.all([
-    listLists(userId, database),
+    listLists(scope, database),
     listTagsForTodos(
-      userId,
+      scope,
       due.map((row) => row.id),
       database,
     ),

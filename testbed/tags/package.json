@@ -12,10 +12,10 @@
     "test:unit": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@keel/auth": "workspace:*",
     "@keel/contracts": "workspace:*",
     "@keel/db": "workspace:*",
     "@keel/runtime": "workspace:*",
+    "@keel/testbed-orgs": "workspace:*",
     "drizzle-orm": "0.45.2",
     "zod": "4.4.3"
   },
