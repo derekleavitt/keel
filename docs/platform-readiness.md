@@ -40,7 +40,7 @@ repeated finding in this repo's history.
 |---|---|---|
 | Sharing and per-resource permissions | T-10 | Ownership alone stops working the moment two people touch one thing |
 | Organizations / multi-tenancy | T-11 | Nearly every platform is multi-tenant, and retrofitting it is brutal |
-| Roles and an admin surface | T-18 | Someone always needs to see across tenants |
+| Roles and an admin surface | T-18 · **done** | Someone always needs to see across tenants. Platform staff is a separate axis from membership — see [[L-037]] |
 | Audit log | T-14 · **done** | Required the first time a customer asks "who changed this". Recorded in the query layer, so every entry point is covered — see [[L-028]] |
 
 ## Asynchronous work

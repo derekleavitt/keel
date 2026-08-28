@@ -23,6 +23,7 @@ export * from './auth.ts';
 export * from './job.ts';
 export * from './list.ts';
 export * from './organization.ts';
+export * from './platform.ts';
 export * from './recurrence.ts';
 export * from './tag.ts';
 export * from './todo.ts';
@@ -35,6 +36,7 @@ import { authTables } from './auth.ts';
 import { jobTables } from './job.ts';
 import { listTables } from './list.ts';
 import { organizationTables } from './organization.ts';
+import { platformTables } from './platform.ts';
 import { recurrenceTables } from './recurrence.ts';
 import { tagTables } from './tag.ts';
 import { todoTables } from './todo.ts';
@@ -46,6 +48,7 @@ export const schema = {
   ...jobTables,
   ...attachmentTables,
   ...apiKeyTables,
+  ...platformTables,
   ...recurrenceTables,
   ...webhookTables,
   ...auditTables,

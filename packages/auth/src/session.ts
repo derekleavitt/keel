@@ -2,6 +2,7 @@ import type { SessionUser, UserId } from '@keel/contracts';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { auth } from './index.ts';
+import { isPlatformAdmin, type PlatformActor } from './platform.ts';
 
 /**
  * Session helpers for server components and server actions.
@@ -66,4 +67,23 @@ export async function requireUserOrRedirect(returnTo?: string): Promise<SessionU
     redirect(returnTo ? `/sign-in?next=${encodeURIComponent(returnTo)}` : '/sign-in');
   }
   return user;
+}
+
+export class NotPlatformAdminError extends Error {
+  constructor() {
+    super('Not a platform administrator');
+  }
+}
+
+/**
+ * The caller, if they are staff. Throws otherwise.
+ *
+ * Throwing rather than returning null is deliberate: every admin route funnels through
+ * this, and a boolean that a caller can forget to check is the shape this exact class of
+ * bug takes. There is no variant that returns false.
+ */
+export async function requirePlatformAdmin(): Promise<PlatformActor> {
+  const caller = await requireUser();
+  if (!(await isPlatformAdmin(caller.id))) throw new NotPlatformAdminError();
+  return { id: caller.id, email: caller.email };
 }
