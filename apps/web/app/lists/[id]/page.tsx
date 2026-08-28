@@ -1,3 +1,4 @@
+import { listActivity } from '@keel/audit';
 import { isTodoFilterNarrowing, type TodoFilter, todoFilterSchema } from '@keel/contracts/todo';
 import { listAttachments } from '@keel/testbed-attachments';
 import { getList, listShares, roleOnList } from '@keel/testbed-lists';
@@ -6,6 +7,7 @@ import { listTags, listTagsForTodos } from '@keel/testbed-tags';
 import { listTodos } from '@keel/testbed-todos';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { ActivityFeed } from '../../activity/activity-feed.tsx';
 import { SharePanel } from './share-panel.tsx';
 import { TodoFilters } from './todo-filters.tsx';
 import { TodoList } from './todo-list.tsx';
@@ -38,10 +40,12 @@ export default async function ListPage({
   const list = await getList(scope, id);
   if (!list) notFound();
 
-  const [todos, role, shares] = await Promise.all([
+  const [todos, role, shares, history] = await Promise.all([
     listTodos(scope, id, filter),
     roleOnList(scope, id),
     listShares(scope, id),
+    // The history of this one list, served straight off the (target_type, target_id) index.
+    listActivity(scope, { targetType: 'list', targetId: id, limit: 20 }),
   ]);
   // One query for every row's tags rather than one per row, and one for the suggestions
   // offered by the inline tag input. Tags are global to the user, so the second is not
@@ -101,6 +105,11 @@ export default async function ListPage({
           })),
         }))}
       />
+
+      <section className="flex flex-col gap-3">
+        <h2 className="font-mono text-xs uppercase tracking-widest text-muted">History</h2>
+        <ActivityFeed rows={history} empty="Nothing recorded for this list yet." />
+      </section>
     </main>
   );
 }

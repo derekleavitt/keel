@@ -26,7 +26,9 @@ async function signUpWithList(page: Page, listName: string) {
 async function addDated(page: Page, title: string, dueDate: string) {
   await page.getByLabel('New todo').fill(title);
   await page.getByLabel('New todo').press('Enter');
-  await expect(page.getByRole('listitem').filter({ hasText: title })).toBeVisible();
+  await expect(
+    page.getByRole('list', { name: 'Todos' }).getByRole('listitem').filter({ hasText: title }),
+  ).toBeVisible();
   await page.getByLabel(`Due date for ${title}`).fill(dueDate);
   await expect(page.getByLabel(/^Mark /).first()).toBeEnabled();
 }

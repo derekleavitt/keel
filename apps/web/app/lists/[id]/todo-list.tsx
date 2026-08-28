@@ -161,7 +161,10 @@ export function TodoList({
         </p>
       ) : (
         <>
-          <ul className="flex flex-col gap-px overflow-hidden rounded-lg border border-line bg-line">
+          <ul
+            aria-label="Todos"
+            className="flex flex-col gap-px overflow-hidden rounded-lg border border-line bg-line"
+          >
             {/*
              * The row is the drop *target*, but only the handle starts a drag.
              *

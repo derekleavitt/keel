@@ -18,7 +18,12 @@ export default async function ListsPage() {
           <p className="font-mono text-xs uppercase tracking-widest text-accent">Lists</p>
           <h1 className="text-2xl font-semibold tracking-tight">{user.name ?? user.email}</h1>
         </div>
-        <SignOutButton />
+        <div className="flex items-center gap-4">
+          <a href="/activity" className="text-sm text-accent underline underline-offset-4">
+            Activity
+          </a>
+          <SignOutButton />
+        </div>
       </header>
 
       <ListManager rows={rows.map(({ id, name, colour }) => ({ id, name, colour }))} />

@@ -1,5 +1,14 @@
 import { expect, type Page, test } from '@playwright/test';
 
+/**
+ * Todo rows, scoped to the todo list.
+ *
+ * A bare `getByRole('listitem')` was correct only while the page held exactly one list.
+ * Adding the History feed put a second one on it and silently broadened every such
+ * query to match activity rows too. See .orchestration/lessons/L-029.md.
+ */
+const todoItems = (page: Page) => page.getByRole('list', { name: 'Todos' }).getByRole('listitem');
+
 const stamp = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 async function signUp(page: Page): Promise<string> {
@@ -60,7 +69,7 @@ async function createListWithTodo(page: Page, listName: string, todo: string) {
   await expect(page.getByRole('heading', { name: listName })).toBeVisible();
   await page.getByLabel('New todo').fill(todo);
   await page.getByLabel('New todo').press('Enter');
-  await expect(page.getByRole('listitem').filter({ hasText: todo })).toBeVisible();
+  await expect(todoItems(page).filter({ hasText: todo })).toBeVisible();
   return page.url();
 }
 
@@ -95,7 +104,7 @@ test('an editor can add to a shared list; a stranger cannot see it at all', asyn
 
   await page.getByLabel('New todo').fill('Bread');
   await page.getByLabel('New todo').press('Enter');
-  await expect(page.getByRole('listitem').filter({ hasText: 'Bread' })).toBeVisible();
+  await expect(todoItems(page).filter({ hasText: 'Bread' })).toBeVisible();
   await signOut(page);
 
   // A third party sees nothing, and the URL alone gets them nowhere.
@@ -126,7 +135,7 @@ test('a viewer can read but not change anything', async ({ page }) => {
   // layer, not the UI.
   await page.getByLabel('New todo').fill('Sneaky');
   await page.getByLabel('New todo').press('Enter');
-  await expect(page.getByRole('listitem').filter({ hasText: 'Sneaky' })).toHaveCount(0);
+  await expect(todoItems(page).filter({ hasText: 'Sneaky' })).toHaveCount(0);
 });
 
 test('only the owner sees the sharing controls', async ({ page }) => {

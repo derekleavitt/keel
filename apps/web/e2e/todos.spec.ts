@@ -1,5 +1,14 @@
 import { expect, type Page, test } from '@playwright/test';
 
+/**
+ * Todo rows, scoped to the todo list.
+ *
+ * A bare `getByRole('listitem')` was correct only while the page held exactly one list.
+ * Adding the History feed put a second one on it and silently broadened every such
+ * query to match activity rows too. See .orchestration/lessons/L-029.md.
+ */
+const todoItems = (page: Page) => page.getByRole('list', { name: 'Todos' }).getByRole('listitem');
+
 const unique = () => `todos-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.test`;
 
 async function signUpWithList(page: Page, listName: string) {
@@ -20,7 +29,7 @@ async function signUpWithList(page: Page, listName: string) {
 async function quickAdd(page: Page, title: string) {
   await page.getByLabel('New todo').fill(title);
   await page.getByLabel('New todo').press('Enter');
-  await expect(page.getByRole('listitem').filter({ hasText: title })).toBeVisible();
+  await expect(todoItems(page).filter({ hasText: title })).toBeVisible();
 }
 
 test('adding a todo takes one field and one keypress', async ({ page }) => {
@@ -30,7 +39,7 @@ test('adding a todo takes one field and one keypress', async ({ page }) => {
   await quickAdd(page, 'Milk');
   await quickAdd(page, 'Bread');
 
-  await expect(page.getByRole('listitem')).toHaveCount(2);
+  await expect(todoItems(page)).toHaveCount(2);
   await expect(page.getByText('2 outstanding')).toBeVisible();
 
   // The field clears and keeps focus, so a second todo needs no mouse.
@@ -47,15 +56,15 @@ test('ticking a todo persists, survives a reload, and sinks it to the bottom', a
   await expect(page.getByText('1 outstanding')).toBeVisible();
 
   // Completed sinks below outstanding.
-  await expect(page.getByRole('listitem').last()).toContainText('First');
+  await expect(todoItems(page).last()).toContainText('First');
 
   await page.reload();
   await expect(page.getByLabel('Mark First not done')).toBeChecked();
-  await expect(page.getByRole('listitem').last()).toContainText('First');
+  await expect(todoItems(page).last()).toContainText('First');
 
   // Un-ticking restores the original order.
   await page.getByLabel('Mark First not done').uncheck();
-  await expect(page.getByRole('listitem').first()).toContainText('First');
+  await expect(todoItems(page).first()).toContainText('First');
   await expect(page.getByText('2 outstanding')).toBeVisible();
 });
 
@@ -101,10 +110,10 @@ test('higher priority sorts first', async ({ page }) => {
   await quickAdd(page, 'Urgent thing');
 
   await page.getByLabel('Priority for Urgent thing').selectOption('high');
-  await expect(page.getByRole('listitem').first()).toContainText('Urgent thing');
+  await expect(todoItems(page).first()).toContainText('Urgent thing');
 
   await page.reload();
-  await expect(page.getByRole('listitem').first()).toContainText('Urgent thing');
+  await expect(todoItems(page).first()).toContainText('Urgent thing');
 });
 
 test('a due date can be cleared, not just set', async ({ page }) => {

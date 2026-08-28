@@ -1,30 +1,24 @@
 {
-  "name": "@keel/testbed-lists",
+  "name": "@keel/audit",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./actions": "./src/actions.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test:unit": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@keel/audit": "workspace:*",
     "@keel/contracts": "workspace:*",
     "@keel/db": "workspace:*",
-    "@keel/runtime": "workspace:*",
-    "@keel/testbed-orgs": "workspace:*",
-    "drizzle-orm": "0.45.2",
-    "zod": "4.4.3"
+    "drizzle-orm": "0.45.2"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.8",
     "@types/node": "26.3.0",
     "typescript": "5.9.3",
-    "vitest": "4.1.11",
-    "@keel/audit": "workspace:*"
+    "vitest": "4.1.11"
   }
 }

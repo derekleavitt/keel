@@ -36,3 +36,29 @@ client list the same way the query does so the row moves immediately too.
 
 Only a browser test catches this; the query layer is correct the whole time. See
 `.orchestration/lessons/L-015.md` and `apps/web/app/lists/[id]/todo-list.tsx`.
+
+## Every repeated structure needs an accessible name
+
+`page.getByRole('listitem')` in a browser spec is not "the todos" — it is "every list item
+on the page", which is the same thing only until someone renders a second list. Adding the
+activity feed to `/lists/[id]` broke nine tests across five files that had nothing to do
+with the audit log.
+
+Give each `<ul>`/`<ol>`/`<table>` an `aria-label`, and scope every role query to one:
+
+```ts
+page.getByRole('list', { name: 'Todos' }).getByRole('listitem')
+```
+
+The markup change and the test fix are the same change, and the page gets better for a
+screen reader either way. `apps/web/e2e/scoping.test.ts` enforces this by reading the specs
+— a browser test cannot, because it only fails once the breaking element already exists.
+See `.orchestration/lessons/L-029.md`.
+
+## Optimistic controls need a settled-state assertion too
+
+`toBeChecked()` on a `useOptimistic` control passes before the server action returns. That
+is fine while asserting on the same page, and a race as soon as the test navigates to a
+server-rendered page that reads the result. Mutating controls are `disabled={pending}`, so
+waiting for one to be enabled again is a direct observation that the round trip finished.
+See `.orchestration/lessons/L-030.md`.

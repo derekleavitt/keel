@@ -1,3 +1,4 @@
+import { audit } from '@keel/audit';
 import type { Scope } from '@keel/contracts/ids';
 import type { TodoFilter, TodoPriority } from '@keel/contracts/todo';
 import { db } from '@keel/db';
@@ -208,6 +209,17 @@ export async function createTodo(
     })
     .returning();
   if (!row) throw new Error('createTodo inserted no row');
+  await audit(
+    scope,
+    {
+      action: 'todo.created',
+      targetType: 'todo',
+      targetId: row.id,
+      summary: `added “${row.title}”`,
+      detail: { listId: input.listId },
+    },
+    database,
+  );
   return row;
 }
 
@@ -227,7 +239,19 @@ export async function updateTodo(
     .set({ ...patch, updatedAt: new Date() })
     .where(editable(scope, eq(todo.id, id)))
     .returning();
-  return row ?? null;
+  if (!row) return null;
+  await audit(
+    scope,
+    {
+      action: 'todo.updated',
+      targetType: 'todo',
+      targetId: row.id,
+      summary: `edited “${row.title}”`,
+      detail: patch,
+    },
+    database,
+  );
+  return row;
 }
 
 export async function setTodoDone(
@@ -241,7 +265,18 @@ export async function setTodoDone(
     .set({ done, updatedAt: new Date() })
     .where(editable(scope, eq(todo.id, id)))
     .returning();
-  return row ?? null;
+  if (!row) return null;
+  await audit(
+    scope,
+    {
+      action: done ? 'todo.completed' : 'todo.reopened',
+      targetType: 'todo',
+      targetId: row.id,
+      summary: `${done ? 'completed' : 'reopened'} “${row.title}”`,
+    },
+    database,
+  );
+  return row;
 }
 
 /**
@@ -324,6 +359,18 @@ export async function deleteTodo(scope: Scope, id: string, database: TodosDataba
       on conflict ("storage_key") do nothing
     `);
     await tx.delete(todo).where(eq(todo.id, id));
+    // `tx`, not the outer handle: the entry commits with the deletion or not at all, so
+    // the log can never claim something that was rolled back.
+    await audit(
+      scope,
+      {
+        action: 'todo.deleted',
+        targetType: 'todo',
+        targetId: id,
+        summary: 'deleted a todo',
+      },
+      tx,
+    );
     return true;
   });
 }

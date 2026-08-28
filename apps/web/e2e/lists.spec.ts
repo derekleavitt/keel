@@ -1,5 +1,8 @@
 import { expect, type Page, test } from '@playwright/test';
 
+/** Lists rows, scoped to the lists list — see .orchestration/lessons/L-029.md. */
+const rows = (page: Page) => page.getByRole('list', { name: 'Lists' }).getByRole('listitem');
+
 /**
  * Lists, driven through the browser.
  *
@@ -23,7 +26,7 @@ async function signUp(page: Page): Promise<string> {
 async function addList(page: Page, name: string) {
   await page.getByLabel('New list name').fill(name);
   await page.getByRole('button', { name: 'Add', exact: true }).click();
-  await expect(page.getByRole('listitem').filter({ hasText: name })).toBeVisible();
+  await expect(rows(page).filter({ hasText: name })).toBeVisible();
 }
 
 test('create, rename, reorder and delete a list', async ({ page }) => {
@@ -34,17 +37,17 @@ test('create, rename, reorder and delete a list', async ({ page }) => {
   await addList(page, 'Groceries');
   await addList(page, 'Work');
 
-  const items = page.getByRole('listitem');
+  const items = rows(page);
   await expect(items).toHaveCount(2);
   await expect(items.first()).toContainText('Groceries');
 
   // Reorder: move Work above Groceries.
   await page.getByRole('button', { name: 'Move Work up' }).click();
-  await expect(page.getByRole('listitem').first()).toContainText('Work');
+  await expect(rows(page).first()).toContainText('Work');
 
   // Order must survive a reload — position is persisted, not derived.
   await page.reload();
-  await expect(page.getByRole('listitem').first()).toContainText('Work');
+  await expect(rows(page).first()).toContainText('Work');
 
   // Rename.
   await page
@@ -54,11 +57,11 @@ test('create, rename, reorder and delete a list', async ({ page }) => {
     .click();
   await page.getByLabel('Rename Groceries').fill('Shopping');
   await page.getByRole('button', { name: 'Save' }).click();
-  await expect(page.getByRole('listitem').filter({ hasText: 'Shopping' })).toBeVisible();
+  await expect(rows(page).filter({ hasText: 'Shopping' })).toBeVisible();
 
   // Delete.
   await page.getByRole('button', { name: 'Delete Shopping' }).click();
-  await expect(page.getByRole('listitem')).toHaveCount(1);
+  await expect(rows(page)).toHaveCount(1);
 });
 
 test('one user never sees another user’s lists', async ({ page }) => {

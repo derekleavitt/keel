@@ -23,6 +23,7 @@ const config: NextConfig = {
   // Internal packages ship TypeScript source directly — no build step between
   // editing a package and seeing the effect in the app.
   transpilePackages: [
+    '@keel/audit',
     '@keel/ui',
     '@keel/auth',
     '@keel/db',
