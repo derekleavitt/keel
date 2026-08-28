@@ -15,23 +15,32 @@ export const PLANS = {
     seats: 1,
     lists: 3,
     storageBytes: 10 * 1024 * 1024,
+    /** API requests per minute. Part of the plan, so it lives with the other allowances. */
+    requestsPerMinute: 60,
   },
   team: {
     label: 'Team',
     seats: 10,
     lists: 100,
     storageBytes: 1024 * 1024 * 1024,
+    requestsPerMinute: 600,
   },
   business: {
     label: 'Business',
     seats: null,
     lists: null,
     storageBytes: 50 * 1024 * 1024 * 1024,
+    requestsPerMinute: 6_000,
   },
 } as const;
 
 export type PlanName = keyof typeof PLANS;
 export type LimitName = 'seats' | 'lists' | 'storageBytes';
+
+/** Requests per minute allowed on the public API for a plan. */
+export function requestsPerMinuteFor(plan: PlanName): number {
+  return PLANS[plan].requestsPerMinute;
+}
 
 export const PLAN_NAMES = Object.keys(PLANS) as PlanName[];
 

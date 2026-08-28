@@ -26,6 +26,7 @@ export * from './job.ts';
 export * from './list.ts';
 export * from './organization.ts';
 export * from './platform.ts';
+export * from './rate-limit.ts';
 export * from './recurrence.ts';
 export * from './tag.ts';
 export * from './todo.ts';
@@ -42,6 +43,7 @@ import { jobTables } from './job.ts';
 import { listTables } from './list.ts';
 import { organizationTables } from './organization.ts';
 import { platformTables } from './platform.ts';
+import { rateLimitTables } from './rate-limit.ts';
 import { recurrenceTables } from './recurrence.ts';
 import { tagTables } from './tag.ts';
 import { todoTables } from './todo.ts';
@@ -56,6 +58,7 @@ export const schema = {
   ...billingTables,
   ...changeLogTables,
   ...platformTables,
+  ...rateLimitTables,
   ...recurrenceTables,
   ...webhookTables,
   ...auditTables,
