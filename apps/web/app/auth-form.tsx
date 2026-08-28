@@ -39,8 +39,21 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
       return;
     }
 
+    /*
+     * `push` alone. A `router.refresh()` on the next line — which is what used to be here —
+     * cancels the navigation it follows: `push` starts fetching the RSC payload for
+     * `/dashboard`, `refresh` immediately invalidates and re-requests the *current* route,
+     * and the browser aborts the first request. The user is left on the sign-in page having
+     * successfully signed in.
+     *
+     * It was invisible against `next dev`, where the payload is usually already in hand, and
+     * appeared the moment the browser suite started running the production build. On a real
+     * network it would have been a routine complaint that signing in "sometimes does
+     * nothing". `/dashboard` is `force-dynamic`, so the push fetches fresh server state and
+     * reads the session cookie the auth response just set — there is nothing left for a
+     * refresh to do. See `.orchestration/lessons/L-039.md`.
+     */
     router.push('/dashboard');
-    router.refresh();
   }
 
   return (

@@ -27,6 +27,7 @@ export * from './platform.ts';
 export * from './recurrence.ts';
 export * from './tag.ts';
 export * from './todo.ts';
+export * from './tsvector.ts';
 export * from './webhook.ts';
 
 import { apiKeyTables } from './api-key.ts';

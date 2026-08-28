@@ -1,3 +1,4 @@
+import { type SQL, sql } from 'drizzle-orm';
 import {
   doublePrecision,
   index,
@@ -9,6 +10,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { user } from './auth.ts';
 import { organization } from './organization.ts';
+import { tsvector } from './tsvector.ts';
 
 /** Viewer may read; editor may also change todos. Owners are not stored as shares. */
 export const listShareRole = pgEnum('list_share_role', ['viewer', 'editor']);
@@ -44,8 +46,16 @@ export const list = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true })
       .$defaultFn(() => new Date())
       .notNull(),
+    /** Full-text index over the list's own name. See `todo.searchVector` for why this is
+     * a generated column rather than a trigger. */
+    searchVector: tsvector('search_vector').generatedAlwaysAs(
+      (): SQL => sql`to_tsvector('english', coalesce(${list.name}, ''))`,
+    ),
   },
-  (table) => [index('list_user_position_idx').on(table.userId, table.position)],
+  (table) => [
+    index('list_search_idx').using('gin', table.searchVector),
+    index('list_user_position_idx').on(table.userId, table.position),
+  ],
 );
 
 /**

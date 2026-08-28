@@ -1,5 +1,5 @@
 {
-  "name": "@keel/testbed-views",
+  "name": "@keel/search",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -13,16 +13,12 @@
   "dependencies": {
     "@keel/contracts": "workspace:*",
     "@keel/db": "workspace:*",
-    "@keel/search": "workspace:*",
-    "@keel/testbed-lists": "workspace:*",
-    "@keel/testbed-orgs": "workspace:*",
-    "@keel/testbed-tags": "workspace:*",
-    "@keel/testbed-todos": "workspace:*"
+    "drizzle-orm": "0.45.2"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "0.5.8",
     "@types/node": "26.3.0",
     "typescript": "5.9.3",
-    "vitest": "4.1.11"
+    "vitest": "4.1.11",
+    "@electric-sql/pglite": "0.5.8"
   }
 }

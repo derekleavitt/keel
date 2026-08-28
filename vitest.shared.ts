@@ -15,6 +15,22 @@ import { defineConfig } from 'vitest/config';
 export const sharedTest = {
   testTimeout: 30_000,
   hookTimeout: 30_000,
+  /**
+   * Two forks per package, not one per core.
+   *
+   * Every PGlite suite boots its own WebAssembly Postgres, so a fork is expensive in memory
+   * as well as in CPU. Vitest sizes its pool to the machine and Turbo runs the packages
+   * concurrently, which multiplies: a dozen packages each claiming ten cores drove the load
+   * average past sixty on a ten-core laptop, and files that finish in twelve seconds on
+   * their own took over ten minutes together.
+   *
+   * The parallelism that pays here is *across* packages, which Turbo already provides.
+   * Within a package the suites spend most of their time waiting on WASM Postgres, so a
+   * third fork buys very little and costs a core something else needed.
+   *
+   * See `.orchestration/lessons/L-041.md`.
+   */
+  poolOptions: { forks: { maxForks: 2, minForks: 1 } },
 };
 
 export default defineConfig({ test: sharedTest });
