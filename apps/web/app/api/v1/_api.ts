@@ -1,3 +1,4 @@
+import { LimitExceededError } from '@keel/billing';
 import type { Scope } from '@keel/contracts/ids';
 import type { Parser } from '@keel/contracts/parse';
 import { scopeFromRequest } from '@keel/testbed-orgs/scope';
@@ -55,6 +56,19 @@ export async function withScope(
   try {
     return await handler(scope);
   } catch (caught) {
+    /*
+     * A plan limit is a fact about the account, not a server fault. Left to the generic
+     * handler below it became a 500, which tells an integrator to retry — and retrying is
+     * exactly what will not help. 402 with the numbers in the message says what happened
+     * and what to do about it.
+     */
+    if (caught instanceof LimitExceededError) {
+      return fail(
+        402,
+        'limit_exceeded',
+        `Your ${caught.check.plan} plan allows ${caught.check.limit} ${caught.limit}.`,
+      );
+    }
     // The message is deliberately not echoed: an internal error string can carry a query,
     // a column name or a connection target.
     console.error(JSON.stringify({ event: 'api.error', message: String(caught) }));

@@ -66,7 +66,7 @@ repeated finding in this repo's history.
 | Public API with keys | T-15 · **done** | Session auth does not work for machines. `/api/v1`, split-token keys, revocable — see [[L-031]] |
 | Outbound webhooks | T-16 · **done** | Integration is table stakes. Two-stage dispatch, signed, replayable, SSRF-guarded |
 | Rate limiting | T-22 | The first abusive client arrives sooner than expected |
-| Payments and subscriptions | T-21 | Any commercial platform, and the hardest to bolt on late |
+| Payments and subscriptions | T-21 · **done (no vendor wired)** | Limits enforced in the query layer; webhooks idempotent and order-safe. Wiring a provider needs the operator's own keys — see `docs/billing.md` |
 
 ## What "done" has to mean
 

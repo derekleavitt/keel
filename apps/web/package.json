@@ -13,6 +13,7 @@
   "dependencies": {
     "@keel/audit": "workspace:*",
     "@keel/auth": "workspace:*",
+    "@keel/billing": "workspace:*",
     "@keel/contracts": "workspace:*",
     "@keel/db": "workspace:*",
     "@keel/email": "workspace:*",

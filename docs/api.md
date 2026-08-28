@@ -38,6 +38,7 @@ Branch on `code`; show `message`. Codes are stable, messages are not.
 | 400 | `invalid_body` | Body was not JSON, or failed the schema. The message names the field. |
 | 400 | `missing_parameter` | A required query parameter was absent. |
 | 401 | `unauthenticated` | No key, bad key, or revoked key. |
+| 402 | `limit_exceeded` | The account's plan does not allow another of these. Retrying will not help. |
 | 404 | `not_found` | No such resource **or** not yours. Deliberately the same answer — see below. |
 | 405 | `method_not_allowed` | Wrong verb for this path. |
 | 500 | `internal_error` | Logged server-side. The message is never echoed to the client. |

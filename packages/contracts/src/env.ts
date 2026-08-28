@@ -50,6 +50,14 @@ const serverSchema = z
       .string()
       .optional()
       .transform((value) => value === '1' || value === 'true'),
+    /**
+     * The secret the payment provider signs webhooks with.
+     *
+     * Optional so `pnpm verify` passes on a clean checkout. When unset the development stub
+     * provider is used with a known secret, which is why the webhook route is safe to leave
+     * mounted locally and must never be reachable in production without this set.
+     */
+    BILLING_WEBHOOK_SECRET: z.string().min(8).optional(),
   })
   /*
    * The hatch is refused on a **deployed** instance, not merely a production *build*.
