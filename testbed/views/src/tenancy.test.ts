@@ -1,7 +1,7 @@
 import type { OrganizationId, Scope } from '@keel/contracts/ids';
 import { createTestDatabase, seedScope, seedSharedOrganization } from '@keel/db/testing';
+import { resolveScope, scopeFor } from '@keel/organizations';
 import { createList, getList, listLists, shareList } from '@keel/testbed-lists';
-import { resolveScope, scopeFor } from '@keel/testbed-orgs';
 import { createTodo, listTodos } from '@keel/testbed-todos';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
  * Tenancy, tested adversarially.
  *
  * Lives in the composition package because it spans orgs, lists and todos. Putting it in
- * `testbed/orgs` created a workspace dependency cycle — orgs would have needed the very
+ * `packages/organizations` created a workspace dependency cycle — orgs would have needed the very
  * features that depend on it for `requireScope`. ADR 0001 turns out to describe
  * cross-feature *tests* as well as cross-feature queries.
  *

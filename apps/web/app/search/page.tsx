@@ -1,4 +1,4 @@
-import { requireScopeOrRedirect } from '@keel/testbed-orgs/scope';
+import { requireScopeOrRedirect } from '@keel/organizations/scope';
 import { searchEverything } from '@keel/testbed-views';
 import Link from 'next/link';
 import { SignOutButton } from '../sign-out-button.tsx';

@@ -2,7 +2,7 @@
 
 import { audit } from '@keel/audit';
 import { createWebhookEndpointSchema } from '@keel/contracts/webhook';
-import { requireScope } from '@keel/testbed-orgs/scope';
+import { requireScope } from '@keel/organizations/scope';
 import {
   createEndpoint,
   deleteEndpoint,

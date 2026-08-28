@@ -1,4 +1,4 @@
-import { requireScopeOrRedirect } from '@keel/testbed-orgs/scope';
+import { requireScopeOrRedirect } from '@keel/organizations/scope';
 import { listDeliveries, listEndpoints } from '@keel/webhooks';
 import Link from 'next/link';
 import { WebhookManager } from './webhook-manager.tsx';

@@ -1,5 +1,5 @@
-import { listMembers, listOrganizations } from '@keel/testbed-orgs';
-import { requireScopeOrRedirect } from '@keel/testbed-orgs/scope';
+import { listMembers, listOrganizations } from '@keel/organizations';
+import { requireScopeOrRedirect } from '@keel/organizations/scope';
 import Link from 'next/link';
 import { SignOutButton } from '../sign-out-button.tsx';
 import { WorkspaceManager } from './workspace-manager.tsx';

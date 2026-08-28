@@ -4,7 +4,7 @@ import {
   createOrganizationAction,
   inviteMemberAction,
   switchOrganizationAction,
-} from '@keel/testbed-orgs/actions';
+} from '@keel/organizations/actions';
 import { Button, useSerialMutations } from '@keel/ui';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';

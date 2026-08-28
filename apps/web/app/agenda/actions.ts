@@ -1,6 +1,6 @@
 'use server';
 
-import { requireScope } from '@keel/testbed-orgs/scope';
+import { requireScope } from '@keel/organizations/scope';
 import { type Agenda, buildAgenda } from '@keel/testbed-views';
 
 /** Re-read the agenda for a timezone only the browser knows. */

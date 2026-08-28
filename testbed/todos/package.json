@@ -21,7 +21,7 @@
     "@keel/scheduling": "workspace:*",
     "@keel/search": "workspace:*",
     "@keel/testbed-lists": "workspace:*",
-    "@keel/testbed-orgs": "workspace:*",
+    "@keel/organizations": "workspace:*",
     "@keel/webhooks": "workspace:*",
     "drizzle-orm": "0.45.2",
     "zod": "4.4.3"

@@ -3,7 +3,7 @@
 import { audit } from '@keel/audit';
 import { issueApiKey, revokeApiKey } from '@keel/auth/api-key';
 import { createApiKeySchema } from '@keel/contracts/api-key';
-import { requireScope } from '@keel/testbed-orgs/scope';
+import { requireScope } from '@keel/organizations/scope';
 import { revalidatePath } from 'next/cache';
 
 /** Every export is a public endpoint: no helpers, no ids from the caller, parse everything. */

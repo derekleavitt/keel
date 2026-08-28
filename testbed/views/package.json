@@ -15,7 +15,7 @@
     "@keel/db": "workspace:*",
     "@keel/search": "workspace:*",
     "@keel/testbed-lists": "workspace:*",
-    "@keel/testbed-orgs": "workspace:*",
+    "@keel/organizations": "workspace:*",
     "@keel/testbed-tags": "workspace:*",
     "@keel/testbed-todos": "workspace:*"
   },

@@ -24,7 +24,8 @@
     "db:migrate": "pnpm --filter @keel/db migrate",
     "db:sync": "pnpm --filter @keel/db sync",
     "db:studio": "pnpm --filter @keel/db studio",
-    "admin:grant": "node --env-file-if-exists=.env scripts/admin-grant.mjs"
+    "admin:grant": "node --env-file-if-exists=.env scripts/admin-grant.mjs",
+    "eject:testbed": "node scripts/eject-testbed.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.10",

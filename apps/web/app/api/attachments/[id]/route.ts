@@ -1,5 +1,5 @@
+import { requireScope } from '@keel/organizations/scope';
 import { readAttachment } from '@keel/testbed-attachments';
-import { requireScope } from '@keel/testbed-orgs/scope';
 
 export const dynamic = 'force-dynamic';
 

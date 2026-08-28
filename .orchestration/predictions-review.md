@@ -159,7 +159,7 @@ protocol intended.
 ## P7-01 — promote organizations out of the testbed
 
 **Evidence: observed twice, unfixed.** `Scope` is a platform primitive that every package
-takes, and the queries producing it live in `testbed/orgs`. `testbed/admin` exists in the
+takes, and the queries producing it live in `packages/organizations`. `packages/admin` exists in the
 testbed only because it must reach them, despite being Keel machinery a template user would
 want. T-24 then found that package had no unit tests at all.
 
