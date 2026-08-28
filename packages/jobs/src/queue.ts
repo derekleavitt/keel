@@ -25,6 +25,19 @@ export interface JobHandler<T = unknown> {
   maxAttempts?: number;
 }
 
+/**
+ * A registry of handlers with differing payload types.
+ *
+ * `JobHandler<T>` is contravariant in `T` — a handler taking `DigestSendPayload` is not a
+ * handler taking `unknown` — so an array of mixed handlers cannot be typed as
+ * `JobHandler<unknown>[]`. `never` is the parameter type every handler is assignable to,
+ * which makes this the one signature a heterogeneous registry can have without `any`.
+ *
+ * The cost is a single cast where the payload is handed back, confined to `runJobs`, where
+ * the value genuinely is unknown until the handler is chosen by kind.
+ */
+export type JobHandlerRegistry = readonly JobHandler<never>[];
+
 export interface EnqueueOptions {
   /** Not before this instant. Defaults to now. */
   runAt?: Date;
@@ -104,7 +117,7 @@ export interface RunResult {
  * making progress on everything behind it.
  */
 export async function runJobs(
-  handlers: JobHandler[],
+  handlers: JobHandlerRegistry,
   options: {
     limit?: number;
     database?: KeelDatabase;
@@ -154,7 +167,9 @@ export async function runJobs(
     }
 
     try {
-      await handler.handle(row.payload, { database, attempt });
+      // Safe: the handler was selected by `kind`, which is what determines the payload
+      // shape. This is the one place the type has to be reasserted.
+      await handler.handle(row.payload as never, { database, attempt });
       await database.delete(job).where(eq(job.id, row.id));
       result.processed += 1;
     } catch (caught) {

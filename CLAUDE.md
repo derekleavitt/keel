@@ -24,6 +24,8 @@ KEEL_E2E=1 pnpm verify   # include the browser smoke test
 | `packages/db` | Drizzle schema, migrations, the `db()` handle. |
 | `packages/auth` | Better Auth config. Nothing else may import `better-auth`. |
 | `packages/ui` | Shared components and design tokens. No business logic. |
+| `packages/jobs` | Postgres-backed job queue: transactional enqueue, backoff, dead letter. |
+| `packages/email` | Transactional email. Writes to `.keel/mail/` in development; never sends. |
 | `packages/runtime` | The only sanctioned way a feature package reaches a Next API. Currently `revalidatePath`/`revalidateTag`. |
 | `testbed/views` | **Cross-feature read models** (agenda, search). Depend on several features, depended on by nothing but the app, write no SQL of their own. Copy this shape for dashboards or admin — see `docs/adr/0001-cross-feature-read-models.md`. |
 | `testbed/*` | The todo app Keel is developed against. Not part of the template. |

@@ -38,12 +38,21 @@ importers:
       '@keel/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@keel/email':
+        specifier: workspace:*
+        version: link:../../packages/email
+      '@keel/jobs':
+        specifier: workspace:*
+        version: link:../../packages/jobs
       '@keel/testbed-lists':
         specifier: workspace:*
         version: link:../../testbed/lists
       '@keel/testbed-orgs':
         specifier: workspace:*
         version: link:../../testbed/orgs
+      '@keel/testbed-reminders':
+        specifier: workspace:*
+        version: link:../../testbed/reminders
       '@keel/testbed-tags':
         specifier: workspace:*
         version: link:../../testbed/tags
