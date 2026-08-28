@@ -15,6 +15,8 @@
  * adapter. A table defined in a feature package would require `@keel/db` to import that
  * package — a workspace dependency cycle, which Turbo hard-fails.
  */
+
+export * from './api-key.ts';
 export * from './attachment.ts';
 export * from './audit.ts';
 export * from './auth.ts';
@@ -24,6 +26,7 @@ export * from './organization.ts';
 export * from './tag.ts';
 export * from './todo.ts';
 
+import { apiKeyTables } from './api-key.ts';
 import { attachmentTables } from './attachment.ts';
 import { auditTables } from './audit.ts';
 import { authTables } from './auth.ts';
@@ -38,6 +41,7 @@ export const schema = {
   ...organizationTables,
   ...jobTables,
   ...attachmentTables,
+  ...apiKeyTables,
   ...auditTables,
   ...listTables,
   ...todoTables,
