@@ -48,6 +48,7 @@ const FILES = [
   'packages/contracts/src/list.ts',
   'packages/contracts/src/tag.ts',
   'packages/contracts/src/recurrence.ts',
+  'packages/contracts/src/attachment.ts',
   // Browser suites for features that are leaving.
   'apps/web/e2e/todos.spec.ts',
   'apps/web/e2e/lists.spec.ts',
@@ -188,6 +189,37 @@ if (fs.existsSync(billingPage)) {
     );
   fs.writeFileSync(billingPage, rewritten);
 }
+
+/**
+ * Remove lines matching `pattern`.
+ *
+ * Used for the places a deleted module is *referenced* rather than imported: barrel
+ * re-exports, the spread into the assembled schema object, `transpilePackages`, and the
+ * workspace glob for a directory that no longer exists. Every one of these is a single line,
+ * which is why a line filter is the right tool and an AST would be overkill.
+ */
+function dropLines(relative, pattern) {
+  const file = path.join(root, relative);
+  if (!fs.existsSync(file)) return;
+  const kept = fs
+    .readFileSync(file, 'utf8')
+    .split('\n')
+    .filter((line) => !pattern.test(line));
+  fs.writeFileSync(file, kept.join('\n'));
+}
+
+const REMOVED = '(todo|list|tag|attachment|recurrence)';
+
+dropLines('apps/web/next.config.ts', /'@keel\/testbed-/);
+dropLines('pnpm-workspace.yaml', /^\s*-\s*"testbed\/\*"/);
+
+// Both halves of the schema barrel: the re-export, and the import plus spread that assemble
+// the `schema` object Drizzle and the Better Auth adapter are handed.
+dropLines(
+  'packages/db/src/schema/index.ts',
+  new RegExp(`'\\./${REMOVED}\\.ts'|\\.\\.\\.${REMOVED}Tables,`),
+);
+dropLines('packages/contracts/src/index.ts', new RegExp(`'\\./${REMOVED}\\.ts'`));
 
 console.log('\nRemoved the testbed and its schema, routes, contracts and specs.\n');
 console.log('Now, in order:');
