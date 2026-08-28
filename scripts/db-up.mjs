@@ -68,6 +68,7 @@ const devDefaults = () => ({
   BETTER_AUTH_URL: '"http://localhost:3000"',
   JOBS_SECRET: `"${crypto.randomBytes(24).toString('hex')}"`,
   WEBHOOK_ALLOW_PRIVATE_HOSTS: '1',
+  AUTH_RATE_LIMIT_DISABLED: '1',
 });
 
 // 2. Create .env if absent. A generated secret beats a placeholder nobody replaces.

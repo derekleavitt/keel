@@ -1,5 +1,5 @@
 import { requireScopeOrRedirect } from '@keel/testbed-orgs/scope';
-import { searchAcrossLists } from '@keel/testbed-views';
+import { searchEverything } from '@keel/testbed-views';
 import Link from 'next/link';
 import { SignOutButton } from '../sign-out-button.tsx';
 
@@ -20,7 +20,7 @@ export default async function SearchPage({
   const raw = (await searchParams).q;
   const query = Array.isArray(raw) ? (raw[0] ?? '') : (raw ?? '');
 
-  const results = await searchAcrossLists(scope, query);
+  const results = await searchEverything(scope, query);
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-8 px-6 py-16">
@@ -39,7 +39,7 @@ export default async function SearchPage({
           name="q"
           type="search"
           defaultValue={results.query}
-          placeholder="Search titles and notes"
+          placeholder="Search todos and lists"
           aria-label="Search todos"
           autoComplete="off"
           className="h-10 flex-1 rounded-md border border-line bg-surface px-3 text-sm outline-none focus-visible:border-accent"
@@ -68,25 +68,40 @@ export default async function SearchPage({
             aria-label="Results"
             className="flex flex-col gap-px overflow-hidden rounded-lg border border-line bg-line"
           >
-            {results.hits.map((hit) => (
-              <li key={hit.id} className="flex flex-col gap-1 bg-surface px-4 py-3">
-                <span className={hit.done ? 'text-sm text-muted line-through' : 'text-sm'}>
-                  {hit.title}
-                </span>
-                {hit.notes && <span className="text-xs text-muted">{hit.notes}</span>}
-                <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-                  <Link href={`/lists/${hit.listId}`} className="underline underline-offset-4">
-                    {hit.listName}
-                  </Link>
-                  {hit.dueDate && <span>· due {hit.dueDate}</span>}
-                  {hit.tags.map((tag) => (
-                    <span key={tag.id} className="rounded-full border border-line px-2 py-0.5">
-                      {tag.name}
+            {results.hits.map((hit) => {
+              const listId = typeof hit.meta?.listId === 'string' ? hit.meta.listId : hit.id;
+              const done = hit.meta?.done === true;
+              const dueDate = typeof hit.meta?.dueDate === 'string' ? hit.meta.dueDate : null;
+
+              return (
+                <li
+                  key={`${hit.type}:${hit.id}`}
+                  className="flex flex-col gap-1 bg-surface px-4 py-3"
+                >
+                  <div className="flex items-baseline gap-2">
+                    <span className="font-mono text-[0.6rem] uppercase tracking-widest text-muted">
+                      {hit.type}
                     </span>
-                  ))}
-                </div>
-              </li>
-            ))}
+                    <span className={done ? 'text-sm text-muted line-through' : 'text-sm'}>
+                      {hit.title}
+                    </span>
+                  </div>
+                  {/*
+                   * The snippet comes from `ts_headline`, which marks the matched fragment
+                   * with `<<`/`>>` rather than HTML — so it can be rendered as text with no
+                   * escaping question at all.
+                   */}
+                  {hit.snippet && <span className="text-xs text-muted">{hit.snippet}</span>}
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+                    {/* Which list a hit lives in — the cross-feature half of a result. */}
+                    <Link href={`/lists/${listId}`} className="underline underline-offset-4">
+                      {typeof hit.meta?.listName === 'string' ? hit.meta.listName : 'Open'}
+                    </Link>
+                    {dueDate && <span>· due {dueDate}</span>}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         </>
       )}

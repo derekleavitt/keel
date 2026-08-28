@@ -26,17 +26,46 @@ describe('the webhook escape hatch', () => {
    * by accident, by a copied `.env`, or by a deploy script that forwards every variable.
    * The application refuses to start rather than running with the SSRF guard disabled.
    */
-  it('makes the application refuse to start in production', () => {
+  it('makes a deployed instance refuse to start', () => {
     const result = serverSchema.safeParse({
       ...BASE,
       NODE_ENV: 'production',
+      BETTER_AUTH_URL: 'https://app.example.com',
       WEBHOOK_ALLOW_PRIVATE_HOSTS: '1',
     });
     expect(result.success).toBe(false);
-    expect(JSON.stringify(result.error?.issues)).toContain('must not be set in production');
+    expect(JSON.stringify(result.error?.issues)).toContain('must not be set on a deployed');
   });
 
+  /*
+   * A production *build* on the developer's own machine is not a deployment. `next start`
+   * sets NODE_ENV=production, so refusing on that alone made it impossible to run or test
+   * your own build — and a guard that blocks testing is a guard someone deletes.
+   */
+  it('allows a production build served from localhost', () => {
+    expect(
+      serverSchema.safeParse({
+        ...BASE,
+        NODE_ENV: 'production',
+        BETTER_AUTH_URL: 'http://localhost:3000',
+        WEBHOOK_ALLOW_PRIVATE_HOSTS: '1',
+      }).success,
+    ).toBe(true);
+  });
+
+  /*
+   * Not asserted here: an unparseable `BETTER_AUTH_URL`. `z.url()` rejects it at the field
+   * before the refinement ever runs, so a test claiming to cover the "treat it as deployed"
+   * fallback would be passing for the wrong reason. That branch is defensive only.
+   */
+
   it('is fine in production when unset', () => {
-    expect(serverSchema.safeParse({ ...BASE, NODE_ENV: 'production' }).success).toBe(true);
+    expect(
+      serverSchema.safeParse({
+        ...BASE,
+        NODE_ENV: 'production',
+        BETTER_AUTH_URL: 'https://app.example.com',
+      }).success,
+    ).toBe(true);
   });
 });

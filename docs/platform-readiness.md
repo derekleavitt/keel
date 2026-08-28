@@ -56,7 +56,7 @@ repeated finding in this repo's history.
 | Capability | Driver | Why any platform needs it |
 |---|---|---|
 | File upload and storage | T-13 | Avatars, attachments, imports, exports |
-| Full-text search | T-19 | Every list view outgrows a `LIKE` query |
+| Full-text search | T-19 · **done** | Every list view outgrows a `LIKE` query. Per-feature sources merged by a composition layer; index is a generated column, so it cannot lag |
 | Real-time updates | T-20 | Two tabs disagreeing is a bug users report |
 
 ## External surface

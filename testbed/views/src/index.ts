@@ -10,4 +10,5 @@
  * Renamed at two instances, while it was still cheap.
  */
 export * from './agenda.ts';
+export * from './full-search.ts';
 export * from './search.ts';

@@ -38,11 +38,18 @@ export * from './url.ts';
  */
 function urlPolicy(): { allowInsecure: boolean; allowPrivate: boolean } {
   try {
-    const env = serverEnv();
-    return {
-      allowInsecure: env.NODE_ENV !== 'production',
-      allowPrivate: env.WEBHOOK_ALLOW_PRIVATE_HOSTS,
-    };
+    /*
+     * Both relaxations hang off the one explicit flag, rather than `NODE_ENV`.
+     *
+     * Keying `allowInsecure` on `NODE_ENV !== 'production'` looked equivalent and was not:
+     * `next start` sets production, so running the production build locally — which the
+     * browser suite now does — started rejecting the plain-HTTP receiver on `127.0.0.1`
+     * that the same suite is required to deliver to. One flag meaning "this is a developer's
+     * machine" is both simpler and harder to get subtly wrong, and it is the flag the
+     * environment contract already refuses on a deployed instance.
+     */
+    const local = serverEnv().WEBHOOK_ALLOW_PRIVATE_HOSTS;
+    return { allowInsecure: local, allowPrivate: local };
   } catch {
     return { allowInsecure: false, allowPrivate: false };
   }

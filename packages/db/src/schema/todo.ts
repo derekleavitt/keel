@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { type SQL, sql } from 'drizzle-orm';
 import {
   boolean,
   date,
@@ -12,6 +12,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { user } from './auth.ts';
 import { list } from './list.ts';
+import { tsvector } from './tsvector.ts';
 
 /**
  * Todos.
@@ -79,6 +80,24 @@ export const todo = pgTable(
      * `set null` rather than cascade on delete: deleting a series must not delete the
      * todos it already produced, which are real work somebody may have done.
      */
+    /**
+     * The full-text index, as a **generated column**.
+     *
+     * Not a trigger and not a background reindex job, and the difference is the whole
+     * acceptance criterion "indexing keeps up with writes": there is no indexing step to
+     * fall behind. Postgres computes this inside the same statement that writes the row, so
+     * a todo is searchable in the transaction that created it and cannot be stale — not
+     * after a crash, not after a bulk import, not after a migration that forgot to reindex.
+     *
+     * The weights matter: a match in a title (`A`) outranks one in notes (`B`). `coalesce`
+     * because `to_tsvector(null)` is null, and a null vector matches nothing — which would
+     * silently exclude every todo without notes from search entirely.
+     */
+    searchVector: tsvector('search_vector').generatedAlwaysAs(
+      (): SQL =>
+        sql`setweight(to_tsvector('english', coalesce(${todo.title}, '')), 'A') || setweight(to_tsvector('english', coalesce(${todo.notes}, '')), 'B')`,
+    ),
+
     recurrenceRuleId: text('recurrence_rule_id'),
     occurrenceDate: date('occurrence_date', { mode: 'string' }),
     createdAt: timestamp('created_at', { withTimezone: true })
@@ -93,6 +112,8 @@ export const todo = pgTable(
     index('todo_list_done_position_idx').on(table.userId, table.listId, table.done, table.position),
     // The cross-list "due today" view (T-07) reads by date, not by list.
     index('todo_user_due_idx').on(table.userId, table.dueDate),
+    // GIN, not btree: a btree index cannot answer a `@@` containment query at all.
+    index('todo_search_idx').using('gin', table.searchVector),
     // The idempotency guarantee. Partial, so the millions of non-recurring todos are not
     // in it and two null occurrence dates never collide.
     uniqueIndex('todo_occurrence_idx')

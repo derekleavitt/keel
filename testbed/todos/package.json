@@ -18,6 +18,7 @@
     "@keel/jobs": "workspace:*",
     "@keel/runtime": "workspace:*",
     "@keel/scheduling": "workspace:*",
+    "@keel/search": "workspace:*",
     "@keel/testbed-lists": "workspace:*",
     "@keel/testbed-orgs": "workspace:*",
     "@keel/webhooks": "workspace:*",

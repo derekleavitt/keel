@@ -38,11 +38,51 @@ const serverSchema = z
       .string()
       .optional()
       .transform((value) => value === '1' || value === 'true'),
+    /**
+     * Turn off the auth rate limiter.
+     *
+     * Exists because the browser suite performs a real sign-up per test, from one address,
+     * and would otherwise spend most of its run being throttled — correctly. Refused on a
+     * deployed instance by the same check as the webhook hatch: with no limiter, the
+     * sign-in endpoint is an unmetered password-guessing oracle.
+     */
+    AUTH_RATE_LIMIT_DISABLED: z
+      .string()
+      .optional()
+      .transform((value) => value === '1' || value === 'true'),
   })
+  /*
+   * The hatch is refused on a **deployed** instance, not merely a production *build*.
+   *
+   * `NODE_ENV=production` alone was the first attempt and it was too blunt: `next start`
+   * sets it, so running the production build on your own machine — which is exactly what
+   * the browser suite does, and what anyone verifying a build does — became impossible the
+   * moment `db:up` wrote the variable into `.env`. A guard that stops you testing your own
+   * build is a guard someone deletes.
+   *
+   * A deployment is distinguished by where it thinks it lives. `BETTER_AUTH_URL` must
+   * already be correct for authentication to work at all, so it cannot be quietly wrong to
+   * dodge this check — getting it wrong breaks sign-in first.
+   */
   .refine(
-    (env) => !(env.NODE_ENV === 'production' && env.WEBHOOK_ALLOW_PRIVATE_HOSTS),
-    'WEBHOOK_ALLOW_PRIVATE_HOSTS must not be set in production — it disables the SSRF guard',
+    (env) => !(env.NODE_ENV === 'production' && isDeployed(env) && env.WEBHOOK_ALLOW_PRIVATE_HOSTS),
+    'WEBHOOK_ALLOW_PRIVATE_HOSTS must not be set on a deployed instance — it disables the SSRF guard',
+  )
+  .refine(
+    (env) => !(env.NODE_ENV === 'production' && isDeployed(env) && env.AUTH_RATE_LIMIT_DISABLED),
+    'AUTH_RATE_LIMIT_DISABLED must not be set on a deployed instance — it unmeters password guessing',
   );
+
+/** True when this instance is serving a real origin rather than the developer's machine. */
+function isDeployed(env: { BETTER_AUTH_URL: string }): boolean {
+  try {
+    const host = new URL(env.BETTER_AUTH_URL).hostname.toLowerCase();
+    return !(host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]');
+  } catch {
+    // An unparseable URL is not evidence of being local, and the safe reading is deployed.
+    return true;
+  }
+}
 
 export type ServerEnv = z.infer<typeof serverSchema>;
 

@@ -22,7 +22,18 @@ const RESET = '\x1b[0m';
 const STEPS = [
   { id: 'lint', label: 'lint & format', cmd: 'pnpm', args: ['exec', 'biome', 'check', '.'] },
   { id: 'typecheck', label: 'typecheck', cmd: 'pnpm', args: ['exec', 'turbo', 'typecheck'] },
-  { id: 'unit', label: 'unit tests', cmd: 'pnpm', args: ['exec', 'turbo', 'test:unit'] },
+  /*
+   * `--concurrency` caps how many package suites Turbo runs at once. With the per-package
+   * fork limit in `vitest.shared.ts` it keeps the step inside the machine it runs on: an
+   * oversubscribed gate produces failures that belong to no particular change, which is the
+   * fastest way to teach people to ignore it.
+   */
+  {
+    id: 'unit',
+    label: 'unit tests',
+    cmd: 'pnpm',
+    args: ['exec', 'turbo', 'test:unit', '--concurrency=4'],
+  },
   { id: 'lessons', label: 'lessons', cmd: 'node', args: ['scripts/lessons-validate.mjs'] },
   { id: 'build', label: 'build', cmd: 'pnpm', args: ['exec', 'turbo', 'build'] },
   {

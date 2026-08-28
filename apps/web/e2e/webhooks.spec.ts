@@ -53,7 +53,19 @@ async function startReceiver(
     url: `http://127.0.0.1:${address.port}/hook`,
     received,
     server,
-    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    /*
+     * `closeAllConnections()` before `close()`.
+     *
+     * `close()` alone waits for every open connection to end, and the delivery worker keeps
+     * one alive — so the receiver never shuts down, the test process never becomes idle, and
+     * the run hangs until the outer timeout kills it. It looked like a slow suite rather
+     * than a leaked socket.
+     */
+    close: () =>
+      new Promise<void>((resolve) => {
+        server.closeAllConnections();
+        server.close(() => resolve());
+      }),
   };
 }
 
@@ -181,6 +193,8 @@ test('a hanging receiver does not slow down the mutation', async ({ page }) => {
     // request path, which is the bug this asserts against.
     expect(Date.now() - started).toBeLessThan(5000);
   } finally {
+    // Same reason as above: this receiver is deliberately holding a request open.
+    server.closeAllConnections();
     server.close();
   }
 });
