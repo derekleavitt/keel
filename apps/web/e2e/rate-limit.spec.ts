@@ -111,7 +111,7 @@ test('two keys in one organisation are counted separately', async ({ page, playw
  * requests would leave someone working through stolen keys entirely unmetered.
  */
 test('failed authentication is rate limited too', async ({ playwright }) => {
-  const api = await client(playwright.request, 'keel_sk_' + 'a'.repeat(64));
+  const api = await client(playwright.request, `keel_sk_${'a'.repeat(64)}`);
 
   let sawRateLimit = false;
   for (let n = 0; n < 700; n += 1) {

@@ -221,6 +221,19 @@ dropLines(
 );
 dropLines('packages/contracts/src/index.ts', new RegExp(`'\\./${REMOVED}\\.ts'`));
 
+/*
+ * Format what was just rewritten.
+ *
+ * The link repointing above changes line lengths, so Biome's formatter would otherwise fail
+ * on the very first `pnpm verify` after an eject — which is a poor first impression from a
+ * script whose whole promise is that the gate still passes. Text surgery owns its formatting.
+ */
+try {
+  execFileSync('pnpm', ['lint:fix'], { cwd: root, stdio: 'ignore' });
+} catch {
+  // Non-fatal: `pnpm verify` will report anything left, which is where it belongs.
+}
+
 console.log('\nRemoved the testbed and its schema, routes, contracts and specs.\n');
 console.log('Now, in order:');
 console.log('  1. pnpm install');
