@@ -130,58 +130,64 @@ for (const relative of [
 git(['rm', '-r', '-q', '--ignore-unmatch', 'scripts/eject-templates']);
 
 /**
- * Strip links to routes that no longer exist.
+ * Repoint links at routes that still exist, rather than deleting them.
  *
- * `typedRoutes` turns every one of these into a compile error rather than a 404 at runtime,
- * which is why this is a fixed list and not a guess — the build says immediately if one was
- * missed.
+ * Deleting a `<Link>` leaves its import unused, which is another error to chase; rewriting the
+ * target keeps every file valid and the navigation sensible. `/dashboard` is where a signed-in
+ * user lands, so it is the honest destination for a "back" link once `/lists` is gone.
+ *
+ * `typedRoutes` is what makes this safe to do mechanically: a link to a route that does not
+ * exist is a compile error, so the build says immediately if one was missed rather than
+ * leaving a 404 to be found by a user.
  */
-function dropLinkBlocks(relative, hrefs) {
+function repointLinks(relative) {
   const file = path.join(root, relative);
   if (!fs.existsSync(file)) return;
 
-  const lines = fs.readFileSync(file, 'utf8').split('\n');
-  const kept = [];
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index] ?? '';
-    if (!hrefs.some((href) => line.includes(`href="${href}"`))) {
-      kept.push(line);
-      continue;
-    }
-    // A self-closing `<Link … />` is one element; an open tag runs to its `</Link>` or `</a>`.
-    if (!/\/>\s*$/.test(line)) {
-      while (index < lines.length && !/<\/(Link|a)>/.test(lines[index] ?? '')) index += 1;
-    }
-    // Drop the opening line of a multi-line element too.
-    while (kept.length > 0 && /<(Link|a)\s*$/.test(kept.at(-1) ?? '')) kept.pop();
-  }
-  fs.writeFileSync(file, kept.join('\n'));
-}
-
-dropLinkBlocks('apps/web/app/admin/layout.tsx', ['/lists']);
-dropLinkBlocks('apps/web/app/organizations/page.tsx', ['/lists']);
-
-/** Remove a line matching `pattern` from a file. */
-function dropLines(relative, pattern) {
-  const file = path.join(root, relative);
-  if (!fs.existsSync(file)) return;
-  const kept = fs
+  const rewritten = fs
     .readFileSync(file, 'utf8')
-    .split('\n')
-    .filter((line) => !pattern.test(line));
-  fs.writeFileSync(file, kept.join('\n'));
+    .replaceAll('href="/lists"', 'href="/dashboard"')
+    .replaceAll('href="/agenda"', 'href="/dashboard"')
+    .replaceAll('href="/search"', 'href="/dashboard"')
+    .replaceAll('Back to lists', 'Back to dashboard')
+    .replaceAll('All lists', 'Dashboard')
+    .replaceAll('Leave staff area', 'Leave staff area');
+  fs.writeFileSync(file, rewritten);
 }
 
-// `transpilePackages` entries and the workspace glob for a directory that no longer exists.
-dropLines('apps/web/next.config.ts', /'@keel\/testbed-/);
-dropLines('pnpm-workspace.yaml', /^\s*-\s*"testbed\/\*"/);
+for (const relative of [
+  'app/admin/layout.tsx',
+  'app/organizations/page.tsx',
+  'app/settings/api-keys/page.tsx',
+  'app/settings/webhooks/page.tsx',
+  'app/settings/billing/page.tsx',
+]) {
+  repointLinks(path.join('apps/web', relative));
+}
 
-// Schema barrel: both the re-export and the spread into the assembled `schema` object.
-dropLines(
-  'packages/db/src/schema/index.ts',
-  /'\.\/(todo|list|tag|attachment|recurrence)\.ts'|\.\.\.(todo|list|tag|attachment|recurrence)Tables,/,
-);
-dropLines('packages/contracts/src/index.ts', /'\.\/(todo|list|tag|recurrence)\.ts'/);
+/**
+ * The billing page counted lists, which no longer exist.
+ *
+ * Billing deliberately cannot measure anything itself — the caller supplies usage, which is
+ * what keeps `@keel/billing` from depending on whichever features have limits (see
+ * `.orchestration/lessons/L-044.md`). So this is a one-line change at the call site: pass
+ * zero, and add your own resource when you have one.
+ */
+const billingPage = path.join(root, 'apps/web/app/settings/billing/page.tsx');
+if (fs.existsSync(billingPage)) {
+  const rewritten = fs
+    .readFileSync(billingPage, 'utf8')
+    .replace(/import \{ listLists \} from '@keel\/testbed-lists';\n/, '')
+    .replace(
+      /const \[lists, members\] = await Promise\.all\(\[listLists\(scope\), listMembers\(scope\)\]\);/,
+      'const members = await listMembers(scope);',
+    )
+    .replace(
+      /lists: lists\.length,/,
+      '// No countable resources yet — supply your own here as you add them.\n    lists: 0,',
+    );
+  fs.writeFileSync(billingPage, rewritten);
+}
 
 console.log('\nRemoved the testbed and its schema, routes, contracts and specs.\n');
 console.log('Now, in order:');
