@@ -53,10 +53,15 @@ describe('schema assembly', () => {
 });
 
 describe('column types that silently break behaviour if changed', () => {
-  it('keeps session.expiresAt a timestamp, not a date', () => {
+  it('keeps session.expiresAt an instant, not a calendar date', () => {
+    // Asserts the *intent* — a session expires at a moment, not on a day — rather than
+    // the exact SQL type. Pinning the literal string made this fail when the column
+    // correctly gained a time zone, which is the failure mode of an over-specified guard:
+    // it fires on improvements as loudly as on regressions.
     const columns = getTableConfig(schema.session).columns;
     const expiresAt = columns.find((c) => c.name === 'expires_at');
-    expect(expiresAt?.getSQLType()).toBe('timestamp');
+    expect(expiresAt?.getSQLType()).toMatch(/^timestamp/);
+    expect(expiresAt?.getSQLType()).not.toBe('date');
   });
 
   it('cascades session deletion from the owning user', () => {

@@ -11,6 +11,15 @@ paths: ["packages/db/**"]
   if it emits every table in the repo, something is wrong; stop and say so.
 - The `user`, `session`, `account` and `verification` tables are dictated by the Better
   Auth adapter. Do not rename their columns.
+- **Every column holding an instant is `timestamp({ withTimezone: true })`.** Drizzle's
+  bare `timestamp()` stores wall-clock digits and forgets which clock they came from.
+  Nothing breaks until something compares in SQL — `expires_at <= now()` reconciles a
+  zone-less column against a zone-aware expression through the *server's* zone and silently
+  returns the wrong answer. It is how the job queue came to claim nothing at all. Enforced
+  by `packages/db/src/schema/timezone.test.ts`; see `.orchestration/lessons/L-025.md`.
+- **Converting a zone-less column needs an explicit `USING ... AT TIME ZONE`.** Without it
+  Postgres reinterprets existing values as server-local and shifts every row, with no error.
+  Write that migration by hand with `--custom`.
 - **Use `.default(value)`, not `.$defaultFn()`, for any column that is NOT NULL.**
   `$defaultFn` is a JavaScript-side default that never reaches SQL, so the generated
   migration adds the column with no `DEFAULT` and fails on any table that already has

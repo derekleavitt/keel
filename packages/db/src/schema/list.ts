@@ -38,10 +38,10 @@ export const list = pgTable(
     name: text('name').notNull(),
     colour: text('colour'),
     position: doublePrecision('position').notNull(),
-    createdAt: timestamp('created_at')
+    createdAt: timestamp('created_at', { withTimezone: true })
       .$defaultFn(() => new Date())
       .notNull(),
-    updatedAt: timestamp('updated_at')
+    updatedAt: timestamp('updated_at', { withTimezone: true })
       .$defaultFn(() => new Date())
       .notNull(),
   },
@@ -69,7 +69,7 @@ export const listShare = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),
     role: listShareRole('role').notNull(),
-    createdAt: timestamp('created_at')
+    createdAt: timestamp('created_at', { withTimezone: true })
       .$defaultFn(() => new Date())
       .notNull(),
   },
