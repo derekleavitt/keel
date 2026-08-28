@@ -25,6 +25,9 @@ export default async function ListsPage() {
           <a href="/settings/api-keys" className="text-sm text-accent underline underline-offset-4">
             API keys
           </a>
+          <a href="/settings/webhooks" className="text-sm text-accent underline underline-offset-4">
+            Webhooks
+          </a>
           <SignOutButton />
         </div>
       </header>

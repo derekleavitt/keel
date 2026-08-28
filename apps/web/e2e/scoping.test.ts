@@ -19,7 +19,21 @@ import { describe, expect, it } from 'vitest';
 const E2E = path.join(process.cwd(), 'e2e');
 
 /** Roles that repeat on a page, so an unscoped query is a coincidence rather than a selector. */
-const AMBIGUOUS = ['listitem', 'row', 'cell', 'listbox', 'option', 'article', 'figure'];
+const AMBIGUOUS = [
+  'listitem',
+  'row',
+  'cell',
+  'listbox',
+  'option',
+  'article',
+  'figure',
+  /*
+   * `alert` is ambiguous on every page in this app, not just crowded ones: Next renders its
+   * own `role="alert"` route announcer into every document. An unscoped `getByRole('alert')`
+   * is therefore a strict-mode violation from the moment it is written.
+   */
+  'alert',
+];
 
 const specs = readdirSync(E2E)
   .filter((name) => name.endsWith('.spec.ts'))

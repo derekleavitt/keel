@@ -8,6 +8,7 @@ export * from './ids.ts';
 export * from './list.ts';
 export * from './tag.ts';
 export * from './todo.ts';
+export * from './webhook.ts';
 
 /** The shape every package agrees on when it talks about a signed-in person. */
 export const sessionUserSchema = z.object({
