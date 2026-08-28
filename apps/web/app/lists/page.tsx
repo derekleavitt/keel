@@ -1,13 +1,15 @@
 import { requireUserOrRedirect } from '@keel/auth/session';
 import { listLists } from '@keel/testbed-lists';
+import { requireScopeOrRedirect } from '@keel/testbed-orgs/scope';
 import { SignOutButton } from '../sign-out-button.tsx';
 import { ListManager } from './list-manager.tsx';
 
 export const dynamic = 'force-dynamic';
 
 export default async function ListsPage() {
+  const scope = await requireScopeOrRedirect('/lists');
   const user = await requireUserOrRedirect('/lists');
-  const rows = await listLists(user.id);
+  const rows = await listLists(scope);
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-8 px-6 py-16">

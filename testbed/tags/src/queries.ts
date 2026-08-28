@@ -1,4 +1,4 @@
-import type { UserId } from '@keel/contracts/ids';
+import type { Scope } from '@keel/contracts/ids';
 import { db } from '@keel/db';
 import { type schema, tag, todo, todoTag } from '@keel/db/schema';
 import { and, asc, eq, inArray, type SQL } from 'drizzle-orm';
@@ -22,8 +22,15 @@ import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
  */
 export type TagsDatabase = PgDatabase<PgQueryResultHKT, typeof schema>;
 
-function ownedBy(userId: UserId, ...narrowing: (SQL | undefined)[]): SQL {
-  const owner = eq(tag.userId, userId);
+/**
+ * Tags are personal *within a tenant*: the same user in two organizations has two
+ * separate sets, which is what people expect from a workspace switcher.
+ */
+function ownedBy(scope: Scope, ...narrowing: (SQL | undefined)[]): SQL {
+  const owner = and(
+    eq(tag.userId, scope.userId),
+    eq(tag.organizationId, scope.organizationId),
+  ) as SQL;
   return and(owner, ...narrowing) ?? owner;
 }
 
@@ -32,20 +39,20 @@ function ownedBy(userId: UserId, ...narrowing: (SQL | undefined)[]): SQL {
  * joining back to `todo` to prove ownership. Same discipline, same failure mode if it is
  * forgotten: no predicate at all rather than a leaky one.
  */
-function linkOwnedBy(userId: UserId, ...narrowing: (SQL | undefined)[]): SQL {
-  const owner = eq(todoTag.userId, userId);
+function linkOwnedBy(scope: Scope, ...narrowing: (SQL | undefined)[]): SQL {
+  const owner = eq(todoTag.userId, scope.userId);
   return and(owner, ...narrowing) ?? owner;
 }
 
-export async function listTags(userId: UserId, database: TagsDatabase = db()) {
-  return database.select().from(tag).where(ownedBy(userId)).orderBy(asc(tag.name));
+export async function listTags(scope: Scope, database: TagsDatabase = db()) {
+  return database.select().from(tag).where(ownedBy(scope)).orderBy(asc(tag.name));
 }
 
-export async function getTag(userId: UserId, id: string, database: TagsDatabase = db()) {
+export async function getTag(scope: Scope, id: string, database: TagsDatabase = db()) {
   const [row] = await database
     .select()
     .from(tag)
-    .where(ownedBy(userId, eq(tag.id, id)))
+    .where(ownedBy(scope, eq(tag.id, id)))
     .limit(1);
   return row ?? null;
 }
@@ -58,7 +65,7 @@ export async function getTag(userId: UserId, id: string, database: TagsDatabase 
  * user can act on. Inline tagging wants the other behaviour and uses `tagTodoByName`.
  */
 export async function createTag(
-  userId: UserId,
+  scope: Scope,
   input: { name: string; colour?: string | null },
   database: TagsDatabase = db(),
 ) {
@@ -66,7 +73,8 @@ export async function createTag(
     .insert(tag)
     .values({
       id: `tag_${crypto.randomUUID()}`,
-      userId,
+      userId: scope.userId,
+      organizationId: scope.organizationId,
       name: input.name,
       colour: input.colour ?? null,
     })
@@ -76,7 +84,7 @@ export async function createTag(
 }
 
 export async function updateTag(
-  userId: UserId,
+  scope: Scope,
   id: string,
   patch: { name?: string; colour?: string | null },
   database: TagsDatabase = db(),
@@ -84,7 +92,7 @@ export async function updateTag(
   const [row] = await database
     .update(tag)
     .set({ ...patch, updatedAt: new Date() })
-    .where(ownedBy(userId, eq(tag.id, id)))
+    .where(ownedBy(scope, eq(tag.id, id)))
     .returning();
   return row ?? null;
 }
@@ -99,25 +107,21 @@ export async function updateTag(
  *
  * Returns whether a row was removed, so callers can tell "gone" from "not yours".
  */
-export async function deleteTag(userId: UserId, id: string, database: TagsDatabase = db()) {
+export async function deleteTag(scope: Scope, id: string, database: TagsDatabase = db()) {
   const rows = await database
     .delete(tag)
-    .where(ownedBy(userId, eq(tag.id, id)))
+    .where(ownedBy(scope, eq(tag.id, id)))
     .returning({ id: tag.id });
   return rows.length > 0;
 }
 
 /** The tags on one todo, for rendering a single row. */
-export async function listTagsForTodo(
-  userId: UserId,
-  todoId: string,
-  database: TagsDatabase = db(),
-) {
+export async function listTagsForTodo(scope: Scope, todoId: string, database: TagsDatabase = db()) {
   return database
     .select({ id: tag.id, name: tag.name, colour: tag.colour })
     .from(todoTag)
     .innerJoin(tag, eq(tag.id, todoTag.tagId))
-    .where(linkOwnedBy(userId, eq(todoTag.todoId, todoId)))
+    .where(linkOwnedBy(scope, eq(todoTag.todoId, todoId)))
     .orderBy(asc(tag.name));
 }
 
@@ -128,7 +132,7 @@ export async function listTagsForTodo(
  * page would ship with if this helper did not exist.
  */
 export async function listTagsForTodos(
-  userId: UserId,
+  scope: Scope,
   todoIds: string[],
   database: TagsDatabase = db(),
 ): Promise<Map<string, { id: string; name: string; colour: string | null }[]>> {
@@ -139,7 +143,7 @@ export async function listTagsForTodos(
     .select({ todoId: todoTag.todoId, id: tag.id, name: tag.name, colour: tag.colour })
     .from(todoTag)
     .innerJoin(tag, eq(tag.id, todoTag.tagId))
-    .where(linkOwnedBy(userId, inArray(todoTag.todoId, todoIds)))
+    .where(linkOwnedBy(scope, inArray(todoTag.todoId, todoIds)))
     .orderBy(asc(tag.name));
 
   for (const row of rows) {
@@ -158,11 +162,7 @@ export async function listTagsForTodos(
  * deliberately spans lists, so the caller gets `listId` back on each row rather than
  * supplying one.
  */
-export async function listTodosWithTag(
-  userId: UserId,
-  tagId: string,
-  database: TagsDatabase = db(),
-) {
+export async function listTodosWithTag(scope: Scope, tagId: string, database: TagsDatabase = db()) {
   return database
     .select({
       id: todo.id,
@@ -173,7 +173,7 @@ export async function listTodosWithTag(
     })
     .from(todoTag)
     .innerJoin(todo, eq(todo.id, todoTag.todoId))
-    .where(linkOwnedBy(userId, eq(todoTag.tagId, tagId)))
+    .where(linkOwnedBy(scope, eq(todoTag.tagId, tagId)))
     .orderBy(asc(todo.done), asc(todo.position));
 }
 
@@ -189,40 +189,40 @@ export async function listTodosWithTag(
  * second insert a conflict, and "this todo has this tag" is already true.
  */
 export async function attachTag(
-  userId: UserId,
+  scope: Scope,
   input: { todoId: string; tagId: string },
   database: TagsDatabase = db(),
 ) {
   const [ownedTodo] = await database
     .select({ id: todo.id })
     .from(todo)
-    .where(and(eq(todo.id, input.todoId), eq(todo.userId, userId)))
+    .where(and(eq(todo.id, input.todoId), eq(todo.userId, scope.userId)))
     .limit(1);
   if (!ownedTodo) return false;
 
   const [ownedTag] = await database
     .select({ id: tag.id })
     .from(tag)
-    .where(ownedBy(userId, eq(tag.id, input.tagId)))
+    .where(ownedBy(scope, eq(tag.id, input.tagId)))
     .limit(1);
   if (!ownedTag) return false;
 
   await database
     .insert(todoTag)
-    .values({ todoId: input.todoId, tagId: input.tagId, userId })
+    .values({ todoId: input.todoId, tagId: input.tagId, userId: scope.userId })
     .onConflictDoNothing();
   return true;
 }
 
 /** Returns whether a link was removed, so callers can tell "not tagged" from "not yours". */
 export async function detachTag(
-  userId: UserId,
+  scope: Scope,
   input: { todoId: string; tagId: string },
   database: TagsDatabase = db(),
 ) {
   const rows = await database
     .delete(todoTag)
-    .where(linkOwnedBy(userId, eq(todoTag.todoId, input.todoId), eq(todoTag.tagId, input.tagId)))
+    .where(linkOwnedBy(scope, eq(todoTag.todoId, input.todoId), eq(todoTag.tagId, input.tagId)))
     .returning({ todoId: todoTag.todoId });
   return rows.length > 0;
 }
@@ -238,7 +238,7 @@ export async function detachTag(
  * Returns the tag, or null when the todo is not the caller's.
  */
 export async function tagTodoByName(
-  userId: UserId,
+  scope: Scope,
   input: { todoId: string; name: string; colour?: string | null },
   database: TagsDatabase = db(),
 ) {
@@ -246,7 +246,7 @@ export async function tagTodoByName(
     const [ownedTodo] = await tx
       .select({ id: todo.id })
       .from(todo)
-      .where(and(eq(todo.id, input.todoId), eq(todo.userId, userId)))
+      .where(and(eq(todo.id, input.todoId), eq(todo.userId, scope.userId)))
       .limit(1);
     if (!ownedTodo) return null;
 
@@ -254,7 +254,8 @@ export async function tagTodoByName(
       .insert(tag)
       .values({
         id: `tag_${crypto.randomUUID()}`,
-        userId,
+        userId: scope.userId,
+        organizationId: scope.organizationId,
         name: input.name,
         colour: input.colour ?? null,
       })
@@ -266,7 +267,7 @@ export async function tagTodoByName(
       const [existing] = await tx
         .select()
         .from(tag)
-        .where(ownedBy(userId, eq(tag.name, input.name)))
+        .where(ownedBy(scope, eq(tag.name, input.name)))
         .limit(1);
       resolved = existing;
     }
@@ -274,7 +275,7 @@ export async function tagTodoByName(
 
     await tx
       .insert(todoTag)
-      .values({ todoId: input.todoId, tagId: resolved.id, userId })
+      .values({ todoId: input.todoId, tagId: resolved.id, userId: scope.userId })
       .onConflictDoNothing();
 
     return resolved;

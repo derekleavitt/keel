@@ -1,6 +1,5 @@
 'use server';
 
-import { requireUserId } from '@keel/auth/session';
 import {
   createListSchema,
   reorderListSchema,
@@ -9,6 +8,7 @@ import {
   updateListSchema,
 } from '@keel/contracts/list';
 import { revalidatePath } from '@keel/runtime';
+import { requireScope } from '@keel/testbed-orgs/scope';
 
 /*
  * Revalidating `/lists` alone does NOT invalidate `/lists/[id]`. The write lands, the
@@ -29,58 +29,58 @@ import { revokeShare, shareList } from './sharing.ts';
  * See `.claude/rules/server-actions.md`.
  */
 export async function createListAction(input: unknown) {
-  const userId = await requireUserId();
+  const scope = await requireScope();
   const parsed = createListSchema.safeParse(input);
   if (!parsed.success)
     return { ok: false as const, error: parsed.error.issues[0]?.message ?? 'Invalid' };
 
-  await createList(userId, parsed.data);
+  await createList(scope, parsed.data);
   revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }
 
 export async function updateListAction(id: unknown, patch: unknown) {
-  const userId = await requireUserId();
+  const scope = await requireScope();
   if (typeof id !== 'string') return { ok: false as const, error: 'Invalid list' };
   const parsed = updateListSchema.safeParse(patch);
   if (!parsed.success)
     return { ok: false as const, error: parsed.error.issues[0]?.message ?? 'Invalid' };
 
-  const row = await updateList(userId, id, parsed.data);
+  const row = await updateList(scope, id, parsed.data);
   if (!row) return { ok: false as const, error: 'List not found' };
   revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }
 
 export async function deleteListAction(id: unknown) {
-  const userId = await requireUserId();
+  const scope = await requireScope();
   if (typeof id !== 'string') return { ok: false as const, error: 'Invalid list' };
 
-  const removed = await deleteList(userId, id);
+  const removed = await deleteList(scope, id);
   if (!removed) return { ok: false as const, error: 'List not found' };
   revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }
 
 export async function reorderListAction(input: unknown) {
-  const userId = await requireUserId();
+  const scope = await requireScope();
   const parsed = reorderListSchema.safeParse(input);
   if (!parsed.success) return { ok: false as const, error: 'Invalid move' };
 
-  const moved = await reorderList(userId, parsed.data);
+  const moved = await reorderList(scope, parsed.data);
   if (!moved) return { ok: false as const, error: 'List not found' };
   revalidatePath('/lists', 'layout');
   return { ok: true as const };
 }
 
 export async function shareListAction(input: unknown) {
-  const userId = await requireUserId();
+  const scope = await requireScope();
   const parsed = shareListSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false as const, error: parsed.error.issues[0]?.message ?? 'Invalid' };
   }
 
-  const result = await shareList(userId, parsed.data);
+  const result = await shareList(scope, parsed.data);
   if (!result.ok) {
     const messages = {
       'not-owner': 'Only the owner can share this list',
@@ -95,11 +95,11 @@ export async function shareListAction(input: unknown) {
 }
 
 export async function revokeShareAction(input: unknown) {
-  const userId = await requireUserId();
+  const scope = await requireScope();
   const parsed = revokeShareSchema.safeParse(input);
   if (!parsed.success) return { ok: false as const, error: 'Invalid' };
 
-  const removed = await revokeShare(userId, parsed.data);
+  const removed = await revokeShare(scope, parsed.data);
   if (!removed) return { ok: false as const, error: 'Nothing to revoke' };
   revalidatePath('/lists', 'layout');
   return { ok: true as const };

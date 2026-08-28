@@ -1,4 +1,4 @@
-import type { UserId } from '@keel/contracts/ids';
+import type { Scope } from '@keel/contracts/ids';
 import { db, type KeelDatabase } from '@keel/db';
 import { list, listShare, user } from '@keel/db/schema';
 import { and, eq } from 'drizzle-orm';
@@ -15,11 +15,11 @@ export type ShareRole = 'viewer' | 'editor';
  */
 
 /** Who a list is shared with. Owner only — the grantee list is itself sensitive. */
-export async function listShares(userId: UserId, listId: string, database: KeelDatabase = db()) {
+export async function listShares(scope: Scope, listId: string, database: KeelDatabase = db()) {
   const [owned] = await database
     .select({ id: list.id })
     .from(list)
-    .where(and(eq(list.id, listId), eq(list.userId, userId)))
+    .where(and(eq(list.id, listId), eq(list.userId, scope.userId)))
     .limit(1);
   if (!owned) return null;
 
@@ -46,14 +46,14 @@ export async function listShares(userId: UserId, listId: string, database: KeelD
  * are ordinary outcomes a form needs to explain, not exceptional conditions.
  */
 export async function shareList(
-  userId: UserId,
+  scope: Scope,
   input: { listId: string; email: string; role: ShareRole },
   database: KeelDatabase = db(),
 ): Promise<{ ok: true } | { ok: false; reason: 'not-owner' | 'no-such-user' | 'self' }> {
   const [owned] = await database
     .select({ id: list.id })
     .from(list)
-    .where(and(eq(list.id, input.listId), eq(list.userId, userId)))
+    .where(and(eq(list.id, input.listId), eq(list.userId, scope.userId)))
     .limit(1);
   if (!owned) return { ok: false, reason: 'not-owner' };
 
@@ -63,7 +63,7 @@ export async function shareList(
     .where(eq(user.email, input.email.trim().toLowerCase()))
     .limit(1);
   if (!recipient) return { ok: false, reason: 'no-such-user' };
-  if (recipient.id === userId) return { ok: false, reason: 'self' };
+  if (recipient.id === scope.userId) return { ok: false, reason: 'self' };
 
   await database
     .insert(listShare)
@@ -78,14 +78,14 @@ export async function shareList(
 
 /** Revoke a grant. Takes effect on the next query — the predicates are subqueries. */
 export async function revokeShare(
-  userId: UserId,
+  scope: Scope,
   input: { listId: string; userId: string },
   database: KeelDatabase = db(),
 ): Promise<boolean> {
   const [owned] = await database
     .select({ id: list.id })
     .from(list)
-    .where(and(eq(list.id, input.listId), eq(list.userId, userId)))
+    .where(and(eq(list.id, input.listId), eq(list.userId, scope.userId)))
     .limit(1);
   if (!owned) return false;
 

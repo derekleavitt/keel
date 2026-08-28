@@ -1,4 +1,4 @@
-import type { UserId } from '@keel/contracts/ids';
+import type { Scope } from '@keel/contracts/ids';
 import type { TodoFilter, TodoPriority } from '@keel/contracts/todo';
 import { db } from '@keel/db';
 import { list, type schema, todo, todoTag } from '@keel/db/schema';
@@ -30,15 +30,15 @@ export type TodosDatabase = PgDatabase<PgQueryResultHKT, typeof schema>;
  * by a grantee must be visible to the owner — neither works if the scope is the row's own
  * user. See `@keel/testbed-lists/access`.
  */
-function visible(userId: UserId, ...narrowing: (SQL | undefined)[]): SQL {
-  const scope = visibleVia(todo.listId, userId);
-  return and(scope, ...narrowing) ?? scope;
+function visible(scope: Scope, ...narrowing: (SQL | undefined)[]): SQL {
+  const predicate = visibleVia(todo.listId, scope);
+  return and(predicate, ...narrowing) ?? predicate;
 }
 
 /** Mutations additionally require an editor grant, or ownership of the list. */
-function editable(userId: UserId, ...narrowing: (SQL | undefined)[]): SQL {
-  const scope = editableVia(todo.listId, userId);
-  return and(scope, ...narrowing) ?? scope;
+function editable(scope: Scope, ...narrowing: (SQL | undefined)[]): SQL {
+  const predicate = editableVia(todo.listId, scope);
+  return and(predicate, ...narrowing) ?? predicate;
 }
 
 /**
@@ -54,7 +54,7 @@ function editable(userId: UserId, ...narrowing: (SQL | undefined)[]): SQL {
  * combinations nobody has written a behavioural test for.
  */
 export function buildTodoListQuery(
-  userId: UserId,
+  scope: Scope,
   listId: string,
   filter: TodoFilter = {},
   database: TodosDatabase = db(),
@@ -79,17 +79,17 @@ export function buildTodoListQuery(
   return database
     .select()
     .from(todo)
-    .where(visible(userId, ...narrowing))
+    .where(visible(scope, ...narrowing))
     .orderBy(asc(todo.done), desc(todo.priority), asc(todo.position));
 }
 
 export async function listTodos(
-  userId: UserId,
+  scope: Scope,
   listId: string,
   filter: TodoFilter = {},
   database: TodosDatabase = db(),
 ) {
-  return buildTodoListQuery(userId, listId, filter, database);
+  return buildTodoListQuery(scope, listId, filter, database);
 }
 
 /**
@@ -104,14 +104,14 @@ export async function listTodos(
  * depend on several features precisely because nothing depends on it.
  */
 export async function listDueTodos(
-  userId: UserId,
+  scope: Scope,
   onOrBefore: string,
   database: TodosDatabase = db(),
 ) {
   return database
     .select()
     .from(todo)
-    .where(visible(userId, eq(todo.done, false), lte(todo.dueDate, onOrBefore)))
+    .where(visible(scope, eq(todo.done, false), lte(todo.dueDate, onOrBefore)))
     .orderBy(asc(todo.dueDate), desc(todo.priority));
 }
 
@@ -138,7 +138,7 @@ export function escapeLikePattern(input: string): string {
  * Returns todo columns only. Which list a hit belongs to is a cross-feature question and
  * belongs to the composition layer — see docs/adr/0001-cross-feature-read-models.md.
  */
-export async function searchTodos(userId: UserId, query: string, database: TodosDatabase = db()) {
+export async function searchTodos(scope: Scope, query: string, database: TodosDatabase = db()) {
   const trimmed = query.trim();
   const narrowing: (SQL | undefined)[] = [];
 
@@ -150,15 +150,15 @@ export async function searchTodos(userId: UserId, query: string, database: Todos
   return database
     .select()
     .from(todo)
-    .where(visible(userId, ...narrowing))
+    .where(visible(scope, ...narrowing))
     .orderBy(asc(todo.done), desc(todo.priority), asc(todo.dueDate));
 }
 
-export async function getTodo(userId: UserId, id: string, database: TodosDatabase = db()) {
+export async function getTodo(scope: Scope, id: string, database: TodosDatabase = db()) {
   const [row] = await database
     .select()
     .from(todo)
-    .where(visible(userId, eq(todo.id, id)))
+    .where(visible(scope, eq(todo.id, id)))
     .limit(1);
   return row ?? null;
 }
@@ -171,7 +171,7 @@ export async function getTodo(userId: UserId, id: string, database: TodosDatabas
  * only proves the list exists, not that it is theirs.
  */
 export async function createTodo(
-  userId: UserId,
+  scope: Scope,
   input: {
     listId: string;
     title: string;
@@ -187,18 +187,18 @@ export async function createTodo(
   const [allowed] = await database
     .select({ id: list.id })
     .from(list)
-    .where(and(eq(list.id, input.listId), editableVia(list.id, userId)))
+    .where(and(eq(list.id, input.listId), editableVia(list.id, scope)))
     .limit(1);
   if (!allowed) return null;
 
-  const existing = await listTodos(userId, input.listId, {}, database);
+  const existing = await listTodos(scope, input.listId, {}, database);
   const last = existing.at(-1)?.position ?? null;
 
   const [row] = await database
     .insert(todo)
     .values({
       id: `tdo_${crypto.randomUUID()}`,
-      userId,
+      userId: scope.userId,
       listId: input.listId,
       title: input.title,
       notes: input.notes ?? null,
@@ -212,7 +212,7 @@ export async function createTodo(
 }
 
 export async function updateTodo(
-  userId: UserId,
+  scope: Scope,
   id: string,
   patch: {
     title?: string;
@@ -225,13 +225,13 @@ export async function updateTodo(
   const [row] = await database
     .update(todo)
     .set({ ...patch, updatedAt: new Date() })
-    .where(editable(userId, eq(todo.id, id)))
+    .where(editable(scope, eq(todo.id, id)))
     .returning();
   return row ?? null;
 }
 
 export async function setTodoDone(
-  userId: UserId,
+  scope: Scope,
   id: string,
   done: boolean,
   database: TodosDatabase = db(),
@@ -239,7 +239,7 @@ export async function setTodoDone(
   const [row] = await database
     .update(todo)
     .set({ done, updatedAt: new Date() })
-    .where(editable(userId, eq(todo.id, id)))
+    .where(editable(scope, eq(todo.id, id)))
     .returning();
   return row ?? null;
 }
@@ -255,7 +255,7 @@ export async function setTodoDone(
  * sort, so dragging among them would reorder something the user cannot see the effect of.
  */
 export async function reorderTodo(
-  userId: UserId,
+  scope: Scope,
   input: { id: string; listId: string; afterId: string | null },
   database: TodosDatabase = db(),
 ) {
@@ -263,7 +263,7 @@ export async function reorderTodo(
     const ordered = await tx
       .select({ id: todo.id, position: todo.position })
       .from(todo)
-      .where(editable(userId, eq(todo.listId, input.listId), eq(todo.done, false)))
+      .where(editable(scope, eq(todo.listId, input.listId), eq(todo.done, false)))
       .orderBy(asc(todo.position));
 
     if (!ordered.some((row) => row.id === input.id)) return false;
@@ -274,7 +274,7 @@ export async function reorderTodo(
       await tx
         .update(todo)
         .set({ position: positionBetween(before, after), updatedAt: new Date() })
-        .where(editable(userId, eq(todo.id, input.id)));
+        .where(editable(scope, eq(todo.id, input.id)));
       return true;
     } catch (error) {
       if (!(error instanceof PositionExhaustedError)) throw error;
@@ -292,16 +292,16 @@ export async function reorderTodo(
       await tx
         .update(todo)
         .set({ position, updatedAt: new Date() })
-        .where(editable(userId, eq(todo.id, row.id)));
+        .where(editable(scope, eq(todo.id, row.id)));
     }
     return true;
   });
 }
 
-export async function deleteTodo(userId: UserId, id: string, database: TodosDatabase = db()) {
+export async function deleteTodo(scope: Scope, id: string, database: TodosDatabase = db()) {
   const rows = await database
     .delete(todo)
-    .where(editable(userId, eq(todo.id, id)))
+    .where(editable(scope, eq(todo.id, id)))
     .returning({ id: todo.id });
   return rows.length > 0;
 }

@@ -1,4 +1,4 @@
-import type { UserId } from '@keel/contracts/ids';
+import type { Scope } from '@keel/contracts/ids';
 import type { TodoPriority } from '@keel/contracts/todo';
 import { db, type KeelDatabase } from '@keel/db';
 import { listLists } from '@keel/testbed-lists';
@@ -33,21 +33,21 @@ export interface SearchResults {
 }
 
 export async function searchAcrossLists(
-  userId: UserId,
+  scope: Scope,
   query: string,
   database: KeelDatabase = db(),
 ): Promise<SearchResults> {
   const trimmed = query.trim();
-  const matches = await searchTodos(userId, trimmed, database);
+  const matches = await searchTodos(scope, trimmed, database);
 
   if (matches.length === 0) {
     return { query: trimmed, hits: [], searched: trimmed.length > 0 };
   }
 
   const [lists, tagsByTodo] = await Promise.all([
-    listLists(userId, database),
+    listLists(scope, database),
     listTagsForTodos(
-      userId,
+      scope,
       matches.map((row) => row.id),
       database,
     ),

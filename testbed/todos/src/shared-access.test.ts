@@ -1,5 +1,5 @@
-import type { UserId } from '@keel/contracts/ids';
-import { createTestDatabase, seedUser } from '@keel/db/testing';
+import type { Scope } from '@keel/contracts/ids';
+import { createTestDatabase, seedScope, seedSharedOrganization } from '@keel/db/testing';
 import { createList, revokeShare, shareList } from '@keel/testbed-lists';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
@@ -21,16 +21,26 @@ import {
  * if the scope is the row's own creator.
  */
 let database: Awaited<ReturnType<typeof createTestDatabase>>;
-let owner: UserId;
-let friend: UserId;
-let stranger: UserId;
+let owner: Scope;
+let friend: Scope;
+let stranger: Scope;
 let listId: string;
 
 beforeEach(async () => {
   database = await createTestDatabase();
-  owner = (await seedUser(database, { id: 'owner', email: 'owner@example.test' })).id as UserId;
-  friend = (await seedUser(database, { id: 'friend', email: 'friend@example.test' })).id as UserId;
-  stranger = (await seedUser(database, { id: 'stranger', email: 's@example.test' })).id as UserId;
+  const ownerSeed = await seedScope(database, { id: 'owner', email: 'owner@example.test' });
+  const friendSeed = await seedScope(database, { id: 'friend', email: 'friend@example.test' });
+  const strangerSeed = await seedScope(database, { id: 'stranger', email: 's@example.test' });
+
+  // Sharing lives inside a tenant, so all three share an organization here.
+  const inOrg = await seedSharedOrganization(database, [
+    ownerSeed.user.id,
+    friendSeed.user.id,
+    strangerSeed.user.id,
+  ]);
+  owner = inOrg(ownerSeed.user.id);
+  friend = inOrg(friendSeed.user.id);
+  stranger = inOrg(strangerSeed.user.id);
   listId = (await createList(owner, { name: 'Shared' }, database)).id;
 });
 
@@ -41,7 +51,7 @@ afterEach(async () => {
 const share = (role: 'viewer' | 'editor') =>
   shareList(owner, { listId, email: 'friend@example.test', role }, database);
 
-const titles = async (userId: UserId) =>
+const titles = async (userId: Scope) =>
   (await listTodos(userId, listId, {}, database)).map((row) => row.title);
 
 describe('a viewer', () => {
@@ -91,7 +101,7 @@ describe('an editor', () => {
     await createTodo(owner, { listId, title: 'Owner item' }, database);
     expect(await titles(friend)).toEqual(['Owner item']);
 
-    await revokeShare(owner, { listId, userId: friend }, database);
+    await revokeShare(owner, { listId, userId: friend.userId }, database);
 
     expect(await titles(friend)).toEqual([]);
     expect(await createTodo(friend, { listId, title: 'After revoke' }, database)).toBeNull();

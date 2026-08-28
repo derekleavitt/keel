@@ -8,6 +8,7 @@ import {
   timestamp,
 } from 'drizzle-orm/pg-core';
 import { user } from './auth.ts';
+import { organization } from './organization.ts';
 
 /** Viewer may read; editor may also change todos. Owners are not stored as shares. */
 export const listShareRole = pgEnum('list_share_role', ['viewer', 'editor']);
@@ -27,6 +28,10 @@ export const list = pgTable(
   'list',
   {
     id: text('id').primaryKey(),
+    /** The tenant this row belongs to. Nothing is ever visible across two. */
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
     userId: text('user_id')
       .notNull()
       .references(() => user.id, { onDelete: 'cascade' }),

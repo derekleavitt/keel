@@ -1,20 +1,20 @@
-import type { UserId } from '@keel/contracts/ids';
-import { createTestDatabase, seedUser } from '@keel/db/testing';
+import type { Scope } from '@keel/contracts/ids';
+import { createTestDatabase, seedScope } from '@keel/db/testing';
 import { createList } from '@keel/testbed-lists';
 import { createTodo } from '@keel/testbed-todos';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { searchAcrossLists } from './search.ts';
 
 let database: Awaited<ReturnType<typeof createTestDatabase>>;
-let owner: UserId;
-let stranger: UserId;
+let owner: Scope;
+let stranger: Scope;
 let work: string;
 let home: string;
 
 beforeEach(async () => {
   database = await createTestDatabase();
-  owner = (await seedUser(database, { id: 'owner' })).id as UserId;
-  stranger = (await seedUser(database, { id: 'stranger' })).id as UserId;
+  owner = (await seedScope(database, { id: 'owner' })).scope;
+  stranger = (await seedScope(database, { id: 'stranger' })).scope;
   work = (await createList(owner, { name: 'Work' }, database)).id;
   home = (await createList(owner, { name: 'Home' }, database)).id;
 });

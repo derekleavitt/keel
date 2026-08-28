@@ -50,6 +50,20 @@
       "when": 1787871168749,
       "tag": "0006_list_share",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1787874556733,
+      "tag": "0007_organizations",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787874567694,
+      "tag": "0008_backfill_personal_orgs",
+      "breakpoints": true
     }
   ]
 }

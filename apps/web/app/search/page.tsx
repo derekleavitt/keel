@@ -1,4 +1,4 @@
-import { requireUserOrRedirect } from '@keel/auth/session';
+import { requireScopeOrRedirect } from '@keel/testbed-orgs/scope';
 import { searchAcrossLists } from '@keel/testbed-views';
 import Link from 'next/link';
 import { SignOutButton } from '../sign-out-button.tsx';
@@ -16,11 +16,11 @@ export default async function SearchPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const user = await requireUserOrRedirect('/search');
+  const scope = await requireScopeOrRedirect('/search');
   const raw = (await searchParams).q;
   const query = Array.isArray(raw) ? (raw[0] ?? '') : (raw ?? '');
 
-  const results = await searchAcrossLists(user.id, query);
+  const results = await searchAcrossLists(scope, query);
 
   return (
     <main className="mx-auto flex min-h-dvh max-w-2xl flex-col gap-8 px-6 py-16">
