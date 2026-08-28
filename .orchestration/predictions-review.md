@@ -46,8 +46,9 @@ a call graph.
 The one case that genuinely needed structural analysis, T-21's dependency cycle, was caught by
 `turbo` on the next build, for free.
 
-**Also relevant:** the codebase is now 26 workspace packages and roughly 380 unit tests, past
-the size the design predicted would make a graph necessary. It did not become necessary.
+**Also relevant:** the codebase is now 25 workspace packages, 440 unit tests and 100 browser
+tests — past the size the design predicted would make a graph necessary. It did not become
+necessary.
 
 **Recommendation: delete P1-01 through P1-05.** The strongest evidence available over ten
 iterations says the gate's existing tools — `tsc`, Turbo, lint, and tests — occupy this space
