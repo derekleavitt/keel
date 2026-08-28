@@ -16,12 +16,14 @@
  * package — a workspace dependency cycle, which Turbo hard-fails.
  */
 export * from './auth.ts';
+export * from './job.ts';
 export * from './list.ts';
 export * from './organization.ts';
 export * from './tag.ts';
 export * from './todo.ts';
 
 import { authTables } from './auth.ts';
+import { jobTables } from './job.ts';
 import { listTables } from './list.ts';
 import { organizationTables } from './organization.ts';
 import { tagTables } from './tag.ts';
@@ -30,6 +32,7 @@ import { todoTables } from './todo.ts';
 export const schema = {
   ...authTables,
   ...organizationTables,
+  ...jobTables,
   ...listTables,
   ...todoTables,
   ...tagTables,
