@@ -1,6 +1,7 @@
 import { serverEnv } from '@keel/contracts/env';
 import { runJobs } from '@keel/jobs';
 import { reminderHandlers } from '@keel/testbed-reminders';
+import { webhookHandlers } from '@keel/webhooks/handlers';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +28,9 @@ export async function POST(request: Request): Promise<Response> {
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const result = await runJobs(reminderHandlers, {
+  // One registry for the whole app. A job whose kind is not registered here is
+  // dead-lettered rather than retried, so adding a handler package means adding it here.
+  const result = await runJobs([...reminderHandlers, ...webhookHandlers], {
     onError: (error, kind) => {
       // Structured so a log search for `job.failed` finds every occurrence, with the kind
       // to group by. The dead-letter queue is the durable record; this is the alert.

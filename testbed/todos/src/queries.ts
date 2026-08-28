@@ -11,6 +11,7 @@ import {
   positionBetween,
   visibleVia,
 } from '@keel/testbed-lists';
+import { emit } from '@keel/webhooks';
 import { and, asc, desc, eq, exists, ilike, inArray, lte, or, type SQL, sql } from 'drizzle-orm';
 import type { PgDatabase, PgQueryResultHKT } from 'drizzle-orm/pg-core';
 
@@ -220,6 +221,11 @@ export async function createTodo(
     },
     database,
   );
+  /*
+   * One insert, in this transaction. No endpoint lookup and no network — the fan-out
+   * happens in the worker, which is what keeps a dead receiver from slowing this down.
+   */
+  await emit(scope, 'todo.created', { id: row.id, listId: row.listId, title: row.title }, database);
   return row;
 }
 
@@ -274,6 +280,12 @@ export async function setTodoDone(
       targetId: row.id,
       summary: `${done ? 'completed' : 'reopened'} “${row.title}”`,
     },
+    database,
+  );
+  await emit(
+    scope,
+    done ? 'todo.completed' : 'todo.reopened',
+    { id: row.id, listId: row.listId, title: row.title, done },
     database,
   );
   return row;
@@ -371,6 +383,7 @@ export async function deleteTodo(scope: Scope, id: string, database: TodosDataba
       },
       tx,
     );
+    await emit(scope, 'todo.deleted', { id }, tx);
     return true;
   });
 }

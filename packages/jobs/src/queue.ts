@@ -89,19 +89,40 @@ async function claim(database: KeelDatabase, asOf: Date) {
     max_attempts: number;
   };
 
+  /*
+   * The instant is passed as an ISO string with an explicit cast, not as a `Date`.
+   *
+   * Drizzle's query builder serialises `Date` for you; a raw `sql` template does not, and
+   * hands the value straight to the driver. `postgres` rejects a `Date` there outright
+   * ("Received an instance of Date"), while PGlite accepts it — so this query worked in
+   * every unit test and threw on the first real request. See
+   * `.orchestration/lessons/L-033.md`.
+   */
+  const at = asOf.toISOString();
   const claimed = (await database.execute(sql`
-    update ${job} set status = 'running', updated_at = ${asOf}
+    update ${job} set status = 'running', updated_at = ${at}::timestamptz
     where id = (
       select id from ${job}
-      where status in ('pending', 'failed') and run_at <= ${asOf}
+      where status in ('pending', 'failed') and run_at <= ${at}::timestamptz
       order by run_at asc
       for update skip locked
       limit 1
     )
     returning id, kind, payload, attempts, max_attempts
-  `)) as unknown as { rows: ClaimedRow[] };
+  `)) as unknown as ClaimedRow[] | { rows: ClaimedRow[] };
 
-  return claimed.rows[0] ?? null;
+  /*
+   * The second driver difference in this one function.
+   *
+   * `execute()` on a raw template returns whatever the driver returns: `postgres` yields
+   * the rows as an array, `node-postgres` and PGlite yield `{ rows }`. Reading `.rows`
+   * unconditionally works in every test and throws on the first real request.
+   *
+   * Normalising here rather than at the call site keeps the difference in the one place
+   * that knows a raw query was used. See `.orchestration/lessons/L-033.md`.
+   */
+  const rows = Array.isArray(claimed) ? claimed : claimed.rows;
+  return rows?.[0] ?? null;
 }
 
 export interface RunResult {

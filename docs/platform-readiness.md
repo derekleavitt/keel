@@ -41,13 +41,13 @@ repeated finding in this repo's history.
 | Sharing and per-resource permissions | T-10 | Ownership alone stops working the moment two people touch one thing |
 | Organizations / multi-tenancy | T-11 | Nearly every platform is multi-tenant, and retrofitting it is brutal |
 | Roles and an admin surface | T-18 | Someone always needs to see across tenants |
-| Audit log | T-14 | Required the first time a customer asks "who changed this" |
+| Audit log | T-14 · **done** | Required the first time a customer asks "who changed this". Recorded in the query layer, so every entry point is covered — see [[L-028]] |
 
 ## Asynchronous work
 
 | Capability | Driver | Why any platform needs it |
 |---|---|---|
-| Background jobs / queue | T-12 | Anything slow must leave the request path |
+| Background jobs / queue | T-12 · **done at T-16** | Anything slow must leave the request path. Marked done at T-12 while its claim query had never once run against the production driver; T-16 was the first HTTP drain and it threw twice. See [[L-033]] |
 | Scheduled / recurring work | T-17 | Reminders, digests, cleanup, billing runs |
 | Transactional email | T-12 | Password resets alone make this mandatory |
 
@@ -63,10 +63,24 @@ repeated finding in this repo's history.
 
 | Capability | Driver | Why any platform needs it |
 |---|---|---|
-| Public API with keys | T-15 | Session auth does not work for machines |
-| Outbound webhooks | T-16 | Integration is table stakes |
+| Public API with keys | T-15 · **done** | Session auth does not work for machines. `/api/v1`, split-token keys, revocable — see [[L-031]] |
+| Outbound webhooks | T-16 · **done** | Integration is table stakes. Two-stage dispatch, signed, replayable, SSRF-guarded |
 | Rate limiting | T-22 | The first abusive client arrives sooner than expected |
 | Payments and subscriptions | T-21 | Any commercial platform, and the hardest to bolt on late |
+
+## What "done" has to mean
+
+T-12 marked the job queue done with 13 green unit tests, a dead-letter path and an admin
+page. Four tasks later, the first time anything drained it over HTTP, its central query
+threw twice for two unrelated reasons — because PGlite and the production driver disagree
+about parameter serialisation and result shape, and no test had ever crossed that boundary.
+
+Nothing in the gate was wrong. The coverage was real. The capability had simply never run.
+
+So a row here is not done because its tests pass. It is done when the testbed genuinely
+uses it **through the running application**, which is the only thing that exercises the
+wire format, the framework's caching, and the driver that actually ships. See
+`.orchestration/lessons/L-033.md`.
 
 ## Operating it
 

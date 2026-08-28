@@ -12,7 +12,8 @@
     "./todo": "./src/todo.ts",
     "./attachment": "./src/attachment.ts",
     "./parse": "./src/parse.ts",
-    "./api-key": "./src/api-key.ts"
+    "./api-key": "./src/api-key.ts",
+    "./webhook": "./src/webhook.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
