@@ -29,6 +29,8 @@ const config: NextConfig = {
     '@keel/contracts',
     '@keel/runtime',
     '@keel/jobs',
+    '@keel/storage',
+    '@keel/testbed-attachments',
     '@keel/email',
     '@keel/testbed-reminders',
     '@keel/testbed-views',

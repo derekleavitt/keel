@@ -1,16 +1,11 @@
 {
-  "name": "@keel/contracts",
+  "name": "@keel/storage",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./env": "./src/env.ts",
-    "./ids": "./src/ids.ts",
-    "./list": "./src/list.ts",
-    "./tag": "./src/tag.ts",
-    "./todo": "./src/todo.ts",
-    "./attachment": "./src/attachment.ts"
+    "./testing": "./src/testing.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

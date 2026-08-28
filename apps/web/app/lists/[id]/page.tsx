@@ -1,4 +1,5 @@
 import { isTodoFilterNarrowing, type TodoFilter, todoFilterSchema } from '@keel/contracts/todo';
+import { listAttachments } from '@keel/testbed-attachments';
 import { getList, listShares, roleOnList } from '@keel/testbed-lists';
 import { requireScopeOrRedirect } from '@keel/testbed-orgs/scope';
 import { listTags, listTagsForTodos } from '@keel/testbed-tags';
@@ -45,6 +46,12 @@ export default async function ListPage({
   // One query for every row's tags rather than one per row, and one for the suggestions
   // offered by the inline tag input. Tags are global to the user, so the second is not
   // scoped to this list.
+  const filesByTodo = new Map(
+    await Promise.all(
+      todos.map(async (row) => [row.id, await listAttachments(scope, row.id)] as const),
+    ),
+  );
+
   const [tagsByTodo, allTags] = await Promise.all([
     listTagsForTodos(
       scope,
@@ -79,6 +86,7 @@ export default async function ListPage({
         listId={list.id}
         allTags={allTags.map(({ id, name, colour }) => ({ id, name, colour }))}
         filtered={isTodoFilterNarrowing(filter)}
+        canEdit={role === 'owner' || role === 'editor'}
         rows={todos.map(({ id, title, done, dueDate, priority }) => ({
           id,
           title,
@@ -86,6 +94,11 @@ export default async function ListPage({
           dueDate,
           priority,
           tags: tagsByTodo.get(id) ?? [],
+          files: (filesByTodo.get(id) ?? []).map((file) => ({
+            id: file.id,
+            filename: file.filename,
+            size: file.size,
+          })),
         }))}
       />
     </main>
