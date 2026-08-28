@@ -6,6 +6,11 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './apps/web/e2e',
+  /*
+   * Browser tests are `.spec.ts`; `.test.ts` beside them is a Vitest check *about* the
+   * specs (see `e2e/scoping.test.ts`). Playwright's default testMatch would claim both.
+   */
+  testMatch: '**/*.spec.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

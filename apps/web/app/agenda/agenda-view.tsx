@@ -71,7 +71,10 @@ function Section({
         {title}
         <span className="font-mono text-xs font-normal text-muted">{entries.length}</span>
       </h2>
-      <ul className="flex flex-col gap-px overflow-hidden rounded-lg border border-line bg-line">
+      <ul
+        aria-label="Agenda"
+        className="flex flex-col gap-px overflow-hidden rounded-lg border border-line bg-line"
+      >
         {entries.map((entry) => (
           <li key={entry.id} className="flex flex-col gap-1 bg-surface px-4 py-3">
             <div className="flex items-baseline justify-between gap-3">

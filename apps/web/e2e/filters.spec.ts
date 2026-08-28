@@ -1,5 +1,14 @@
 import { expect, type Page, test } from '@playwright/test';
 
+/**
+ * Todo rows, scoped to the todo list.
+ *
+ * A bare `getByRole('listitem')` was correct only while the page held exactly one list.
+ * Adding the History feed put a second one on it and silently broadened every such
+ * query to match activity rows too. See .orchestration/lessons/L-029.md.
+ */
+const todoItems = (page: Page) => page.getByRole('list', { name: 'Todos' }).getByRole('listitem');
+
 const unique = () => `filter-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.test`;
 
 async function signUpWithList(page: Page, listName: string) {
@@ -20,7 +29,7 @@ async function signUpWithList(page: Page, listName: string) {
 async function quickAdd(page: Page, title: string) {
   await page.getByLabel('New todo').fill(title);
   await page.getByLabel('New todo').press('Enter');
-  await expect(page.getByRole('listitem').filter({ hasText: title })).toBeVisible();
+  await expect(todoItems(page).filter({ hasText: title })).toBeVisible();
 }
 
 test('an empty list and a filtered-empty list say different things', async ({ page }) => {
@@ -50,16 +59,16 @@ test('filters narrow by status and priority, and survive a reload', async ({ pag
   await page.getByLabel('Filter by priority').selectOption('high');
   await page.getByRole('button', { name: 'Apply' }).click();
 
-  await expect(page.getByRole('listitem')).toHaveCount(1);
-  await expect(page.getByRole('listitem').first()).toContainText('Urgent item');
+  await expect(todoItems(page)).toHaveCount(1);
+  await expect(todoItems(page).first()).toContainText('Urgent item');
 
   // Filter state lives in the URL, so it survives a reload and can be shared.
   await page.reload();
-  await expect(page.getByRole('listitem')).toHaveCount(1);
+  await expect(todoItems(page)).toHaveCount(1);
   expect(page.url()).toContain('priority=high');
 
   await page.getByRole('link', { name: 'Clear filters' }).click();
-  await expect(page.getByRole('listitem')).toHaveCount(2);
+  await expect(todoItems(page)).toHaveCount(2);
 });
 
 test('combining status and priority narrows further', async ({ page }) => {
@@ -82,6 +91,6 @@ test('combining status and priority narrows further', async ({ page }) => {
   await page.getByLabel('Filter by priority').selectOption('high');
   await page.getByRole('button', { name: 'Apply' }).click();
 
-  await expect(page.getByRole('listitem')).toHaveCount(1);
-  await expect(page.getByRole('listitem').first()).toContainText('Open urgent');
+  await expect(todoItems(page)).toHaveCount(1);
+  await expect(todoItems(page).first()).toContainText('Open urgent');
 });

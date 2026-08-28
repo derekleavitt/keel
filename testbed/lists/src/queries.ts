@@ -1,3 +1,4 @@
+import { audit } from '@keel/audit';
 import type { Scope } from '@keel/contracts/ids';
 import { db, type KeelDatabase } from '@keel/db';
 import { list } from '@keel/db/schema';
@@ -60,6 +61,16 @@ export async function createList(
     })
     .returning();
   if (!row) throw new Error('createList inserted no row');
+  await audit(
+    scope,
+    {
+      action: 'list.created',
+      targetType: 'list',
+      targetId: row.id,
+      summary: `created the list “${row.name}”`,
+    },
+    database,
+  );
   return row;
 }
 
@@ -75,7 +86,19 @@ export async function updateList(
     // Renaming is an owner action: an editor may change what is in a list, not the list.
     .where(ownedByUser(scope, eq(list.id, id)))
     .returning();
-  return row ?? null;
+  if (!row) return null;
+  await audit(
+    scope,
+    {
+      action: 'list.updated',
+      targetType: 'list',
+      targetId: row.id,
+      summary: `renamed a list to “${row.name}”`,
+      detail: patch,
+    },
+    database,
+  );
+  return row;
 }
 
 /** Returns whether a row was removed, so callers can tell "gone" from "not yours". */
@@ -84,7 +107,20 @@ export async function deleteList(scope: Scope, id: string, database: ListsDataba
     .delete(list)
     .where(ownedByUser(scope, eq(list.id, id)))
     .returning({ id: list.id });
-  return rows.length > 0;
+  if (rows.length === 0) return false;
+  // Recorded after the row is gone. The entry carries no foreign key to its target
+  // precisely so it survives this — "who deleted it" is a question asked afterwards.
+  await audit(
+    scope,
+    {
+      action: 'list.deleted',
+      targetType: 'list',
+      targetId: id,
+      summary: 'deleted a list',
+    },
+    database,
+  );
+  return true;
 }
 
 /**

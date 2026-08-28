@@ -55,7 +55,10 @@ export function ListManager({ rows }: { rows: Row[] }) {
       {rows.length === 0 ? (
         <p className="text-sm text-muted">No lists yet. Add one above.</p>
       ) : (
-        <ul className="flex flex-col gap-px overflow-hidden rounded-lg border border-line bg-line">
+        <ul
+          aria-label="Lists"
+          className="flex flex-col gap-px overflow-hidden rounded-lg border border-line bg-line"
+        >
           {rows.map((row, index) => (
             <li key={row.id} className="flex items-center gap-3 bg-surface px-4 py-3">
               {editing === row.id ? (

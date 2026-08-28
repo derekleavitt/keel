@@ -1,3 +1,4 @@
+import { listActivity } from '@keel/audit';
 import type { Scope } from '@keel/contracts/ids';
 import { createTestDatabase, seedScope } from '@keel/db/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -138,5 +139,42 @@ describe('editing', () => {
     const created = await createList(owner, { name: 'Gone' }, database);
     expect(await deleteList(owner, created.id, database)).toBe(true);
     expect(await deleteList(owner, created.id, database)).toBe(false);
+  });
+});
+
+describe('activity', () => {
+  const feed = async (scope: Scope) =>
+    (await listActivity(scope, {}, database)).map((row) => `${row.action}: ${row.summary}`);
+
+  it('records mutations without the caller asking for it', async () => {
+    const created = await createList(owner, { name: 'Groceries' }, database);
+    await updateList(owner, created.id, { name: 'Shopping' }, database);
+
+    expect(await feed(owner)).toEqual([
+      'list.updated: renamed a list to “Shopping”',
+      'list.created: created the list “Groceries”',
+    ]);
+  });
+
+  /*
+   * The whole reason `audit_entry.target_id` carries no foreign key. Asking "who deleted
+   * this list" only ever happens once the list is gone, so a cascade would delete the
+   * answer along with the question.
+   */
+  it('keeps the entry after the list it describes is deleted', async () => {
+    const created = await createList(owner, { name: 'Doomed' }, database);
+    expect(await deleteList(owner, created.id, database)).toBe(true);
+
+    expect(await getList(owner, created.id, database)).toBeNull();
+    expect(await feed(owner)).toContain('list.deleted: deleted a list');
+  });
+
+  it('does not record a write that was refused', async () => {
+    const created = await createList(owner, { name: 'Private' }, database);
+    await updateList(stranger, created.id, { name: 'Hacked' }, database);
+    await deleteList(stranger, created.id, database);
+
+    // The stranger's feed is empty: nothing happened, so nothing is recorded.
+    expect(await feed(stranger)).toEqual([]);
   });
 });

@@ -16,6 +16,7 @@
  * package — a workspace dependency cycle, which Turbo hard-fails.
  */
 export * from './attachment.ts';
+export * from './audit.ts';
 export * from './auth.ts';
 export * from './job.ts';
 export * from './list.ts';
@@ -24,6 +25,7 @@ export * from './tag.ts';
 export * from './todo.ts';
 
 import { attachmentTables } from './attachment.ts';
+import { auditTables } from './audit.ts';
 import { authTables } from './auth.ts';
 import { jobTables } from './job.ts';
 import { listTables } from './list.ts';
@@ -36,6 +38,7 @@ export const schema = {
   ...organizationTables,
   ...jobTables,
   ...attachmentTables,
+  ...auditTables,
   ...listTables,
   ...todoTables,
   ...tagTables,

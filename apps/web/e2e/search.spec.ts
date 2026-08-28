@@ -1,5 +1,13 @@
 import { expect, type Page, test } from '@playwright/test';
 
+/*
+ * Two different lists, two different locators. `quickAdd` runs on a list detail page and
+ * `search` on the results page — a single unscoped helper covered both only because
+ * neither page had a second list on it. See .orchestration/lessons/L-029.md.
+ */
+const rows = (page: Page) => page.getByRole('list', { name: 'Results' }).getByRole('listitem');
+const todoItems = (page: Page) => page.getByRole('list', { name: 'Todos' }).getByRole('listitem');
+
 const unique = () => `search-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.test`;
 
 async function signUpWithList(page: Page, listName: string) {
@@ -25,7 +33,7 @@ async function openList(page: Page, listName: string, create = false) {
 async function quickAdd(page: Page, title: string) {
   await page.getByLabel('New todo').fill(title);
   await page.getByLabel('New todo').press('Enter');
-  await expect(page.getByRole('listitem').filter({ hasText: title })).toBeVisible();
+  await expect(todoItems(page).filter({ hasText: title })).toBeVisible();
 }
 
 async function search(page: Page, query: string) {
@@ -43,7 +51,7 @@ test('search finds todos across lists and says where each lives', async ({ page 
 
   await search(page, 'milk');
 
-  await expect(page.getByRole('listitem')).toHaveCount(2);
+  await expect(rows(page)).toHaveCount(2);
   await expect(page.getByRole('link', { name: 'Work' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Home' })).toBeVisible();
   await expect(page.getByText('2 results')).toBeVisible();
@@ -57,8 +65,8 @@ test('a typed percent sign is literal, not a wildcard', async ({ page }) => {
   await search(page, '50%');
 
   // Unescaped, "50%" as a LIKE pattern would match both.
-  await expect(page.getByRole('listitem')).toHaveCount(1);
-  await expect(page.getByRole('listitem').first()).toContainText('50% done');
+  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page).first()).toContainText('50% done');
 });
 
 test('a typed underscore is literal, not a single-character wildcard', async ({ page }) => {
@@ -68,8 +76,8 @@ test('a typed underscore is literal, not a single-character wildcard', async ({ 
 
   await search(page, 'snake_case');
 
-  await expect(page.getByRole('listitem')).toHaveCount(1);
-  await expect(page.getByRole('listitem').first()).toContainText('snake_case');
+  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page).first()).toContainText('snake_case');
 });
 
 test('an empty search shows everything rather than nothing', async ({ page }) => {
@@ -78,13 +86,13 @@ test('an empty search shows everything rather than nothing', async ({ page }) =>
   await quickAdd(page, 'Two');
 
   await page.goto('/search');
-  await expect(page.getByRole('listitem')).toHaveCount(2);
+  await expect(rows(page)).toHaveCount(2);
 
   // And clearing a query returns to everything, rather than emptying the screen.
   await search(page, 'One');
-  await expect(page.getByRole('listitem')).toHaveCount(1);
+  await expect(rows(page)).toHaveCount(1);
   await search(page, '');
-  await expect(page.getByRole('listitem')).toHaveCount(2);
+  await expect(rows(page)).toHaveCount(2);
 });
 
 test('no match says so, quoting what was searched', async ({ page }) => {
@@ -104,7 +112,7 @@ test('the query lives in the URL, so results survive a reload', async ({ page })
   expect(page.url()).toContain('q=milk');
 
   await page.reload();
-  await expect(page.getByRole('listitem')).toHaveCount(1);
+  await expect(rows(page)).toHaveCount(1);
   await expect(page.getByLabel('Search todos')).toHaveValue('milk');
 });
 

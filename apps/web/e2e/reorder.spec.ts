@@ -1,5 +1,14 @@
 import { expect, type Page, test } from '@playwright/test';
 
+/**
+ * Todo rows, scoped to the todo list.
+ *
+ * A bare `getByRole('listitem')` was correct only while the page held exactly one list.
+ * Adding the History feed put a second one on it and silently broadened every such
+ * query to match activity rows too. See .orchestration/lessons/L-029.md.
+ */
+const todoItems = (page: Page) => page.getByRole('list', { name: 'Todos' }).getByRole('listitem');
+
 const unique = () => `reorder-${Date.now()}-${Math.random().toString(36).slice(2, 8)}@example.test`;
 
 async function signUpWithList(page: Page, listName: string) {
@@ -20,7 +29,7 @@ async function signUpWithList(page: Page, listName: string) {
 async function quickAdd(page: Page, title: string) {
   await page.getByLabel('New todo').fill(title);
   await page.getByLabel('New todo').press('Enter');
-  await expect(page.getByRole('listitem').filter({ hasText: title })).toBeVisible();
+  await expect(todoItems(page).filter({ hasText: title })).toBeVisible();
 }
 
 /**
@@ -31,9 +40,9 @@ async function quickAdd(page: Page, title: string) {
  */
 const titles = async (page: Page) =>
   (
-    await page
-      .getByRole('listitem')
-      .evaluateAll((items) => items.map((item) => item.getAttribute('aria-label') ?? ''))
+    await todoItems(page).evaluateAll((items) =>
+      items.map((item) => item.getAttribute('aria-label') ?? ''),
+    )
   ).map((label) => label.replace(/^Reorder /, ''));
 
 /**

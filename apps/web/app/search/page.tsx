@@ -64,7 +64,10 @@ export default async function SearchPage({
             {results.hits.length} {results.hits.length === 1 ? 'result' : 'results'}
             {results.searched ? ` for “${results.query}”` : ''}
           </p>
-          <ul className="flex flex-col gap-px overflow-hidden rounded-lg border border-line bg-line">
+          <ul
+            aria-label="Results"
+            className="flex flex-col gap-px overflow-hidden rounded-lg border border-line bg-line"
+          >
             {results.hits.map((hit) => (
               <li key={hit.id} className="flex flex-col gap-1 bg-surface px-4 py-3">
                 <span className={hit.done ? 'text-sm text-muted line-through' : 'text-sm'}>
