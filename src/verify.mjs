@@ -2,54 +2,56 @@
 /**
  * The oracle.
  *
- * This is the point of the whole exercise: success is decidable. Not "looks right", not
- * "the tests pass" — four properties, each true or false, checked against the set of numbers
- * that were supposed to be contributed.
+ * The whole reason this problem is worth using as a testbed: success is decidable. Four
+ * properties, each true or false. No judgement about whether a run went well.
  *
- * Everything else here exists to be judged by this file.
+ * Format is one line, comma separated: `1,2,3,...,N`. That is not a cosmetic choice. With one
+ * number per line, concurrent appends can't corrupt each other and a final `sort` fixes
+ * everything — the coordination problem mostly evaporates. On a single line it doesn't:
+ * appends land in arrival order inside one line, so somebody has to decide where each number
+ * goes, and that decision needs to see the current state.
  */
 import fs from 'node:fs';
 import process from 'node:process';
 
 export function verify(path, expected) {
-  const raw = fs.existsSync(path) ? fs.readFileSync(path, 'utf8') : '';
-  const lines = raw.split('\n').filter((line) => line.trim() !== '');
-
+  const raw = fs.existsSync(path) ? fs.readFileSync(path, 'utf8').trim() : '';
   const failures = [];
 
+  // One line. Two means somebody appended with a newline and broke the format.
+  const lines = raw.split('\n').filter((line) => line.trim() !== '');
+  if (lines.length > 1) failures.push(`expected 1 line, found ${lines.length}`);
+
+  const fields = raw === '' ? [] : (lines[0] ?? '').split(',');
+
   /*
-   * 1. Well-formed.
-   *
-   * Two overlapping appends can interleave mid-line and produce "1213" out of 12 and 13.
-   * Checking this first means a torn write is reported as a torn write, rather than as a
-   * missing number plus a mysterious extra one.
+   * Well-formed. Two appends that interleave mid-field give "1213" or ",,". Checking this
+   * first means a torn write reads as a torn write rather than as one missing number and one
+   * mysterious extra.
    */
-  const malformed = lines.filter((line) => !/^-?\d+$/.test(line.trim()));
+  const malformed = fields.filter((field) => !/^-?\d+$/.test(field.trim()));
   if (malformed.length > 0) {
-    failures.push(`malformed lines: ${JSON.stringify(malformed.slice(0, 5))}`);
+    failures.push(`malformed fields: ${JSON.stringify(malformed.slice(0, 5))}`);
   }
 
-  const values = lines
-    .filter((line) => /^-?\d+$/.test(line.trim()))
-    .map((line) => Number(line.trim()));
+  const values = fields
+    .filter((field) => /^-?\d+$/.test(field.trim()))
+    .map((field) => Number(field.trim()));
 
-  // 2. Sorted.
+  // Sorted.
   for (let i = 1; i < values.length; i += 1) {
     const previous = values[i - 1] ?? 0;
     const current = values[i] ?? 0;
     if (previous > current) {
-      failures.push(`out of order at line ${i + 1}: ${previous} then ${current}`);
+      failures.push(`out of order at position ${i + 1}: ${previous} then ${current}`);
       break;
     }
   }
 
   /*
-   * 3. Complete.
-   *
-   * This is where a lost update shows up, and nowhere else. Two agents read the same state,
-   * both write, and one contribution vanishes. The file is still sorted. It is still
-   * well-formed. Nothing errored. The only evidence is a number that should be there and
-   * isn't — which is exactly why this problem is worth a testbed.
+   * Complete. This is where a lost update shows up and nowhere else — two workers read the
+   * same state, both write, one contribution vanishes. The file is still sorted, still
+   * well-formed, nothing errored. Only the missing number gives it away.
    */
   const present = new Set(values);
   const missing = expected.filter((n) => !present.has(n));
@@ -57,7 +59,6 @@ export function verify(path, expected) {
     failures.push(`missing ${missing.length}: ${JSON.stringify(missing.slice(0, 10))}`);
   }
 
-  // 4. Nothing duplicated, nothing invented.
   const counts = new Map();
   for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
   const duplicated = [...counts].filter(([, n]) => n > 1).map(([v]) => v);
@@ -68,7 +69,7 @@ export function verify(path, expected) {
   const expectedSet = new Set(expected);
   const extra = values.filter((v) => !expectedSet.has(v));
   if (extra.length > 0) {
-    failures.push(`unexpected values: ${JSON.stringify(extra.slice(0, 10))}`);
+    failures.push(`unexpected: ${JSON.stringify(extra.slice(0, 10))}`);
   }
 
   return { ok: failures.length === 0, failures, found: values.length, expected: expected.length };

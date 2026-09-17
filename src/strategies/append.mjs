@@ -29,7 +29,13 @@ export async function contribute({ file, value, delay }) {
   // is no window to widen. Kept so the strategies are timed against the same work.
   if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
 
-  fs.appendFileSync(file, `${value}\n`);
+  /*
+   * A comma-separated append, so the file is one line throughout. The leading comma is the
+   * whole trick: writing ',N' rather than 'N,' means no worker ever has to know whether it is
+   * first, which would require reading — and reading is what this strategy exists to avoid.
+   * The stray leading comma is the compaction step's problem.
+   */
+  fs.appendFileSync(file, `,${value}`);
 }
 
 /**
@@ -42,11 +48,12 @@ export async function contribute({ file, value, delay }) {
 export function compact(file) {
   const raw = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
   const values = raw
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line !== '')
+    .trim()
+    .split(',')
+    .map((field) => field.trim())
+    .filter((field) => field !== '')
     .map(Number)
     .sort((a, b) => a - b);
 
-  fs.writeFileSync(file, `${values.join('\n')}\n`);
+  fs.writeFileSync(file, values.join(','));
 }

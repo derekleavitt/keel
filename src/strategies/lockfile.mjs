@@ -91,11 +91,8 @@ export async function contribute({ file, value, delay }) {
 
   try {
     const raw = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
-    const values = raw
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line !== '')
-      .map(Number);
+    const values =
+    raw.trim() === '' ? [] : raw.trim().split(',').map((field) => Number(field.trim()));
 
     // The same window the naive strategy loses to. Held under the lock it is harmless, which
     // is why both strategies are measured with the same delay.
@@ -103,7 +100,7 @@ export async function contribute({ file, value, delay }) {
 
     values.push(value);
     values.sort((a, b) => a - b);
-    fs.writeFileSync(file, `${values.join('\n')}\n`);
+    fs.writeFileSync(file, values.join(','));
   } finally {
     // `finally`, so a throw inside the critical section doesn't wedge everyone else until the
     // staleness timeout.
