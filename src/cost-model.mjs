@@ -22,13 +22,7 @@
 import path from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
-
-/** Published per-million-token rates. Input, output. */
-const MODELS = {
-  opus: { id: 'claude-opus-5', input: 5.0, output: 25.0 },
-  sonnet: { id: 'claude-sonnet-5', input: 2.0, output: 10.0 },
-  haiku: { id: 'claude-haiku-4-5', input: 1.0, output: 5.0 },
-};
+import { MODELS, warnIfPricingStale } from './pricing.mjs';
 
 /**
  * Fixed prompt overhead per agent call, in tokens.
@@ -336,6 +330,7 @@ export function run() {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  warnIfPricingStale();
   try {
     run();
   } catch (err) {
