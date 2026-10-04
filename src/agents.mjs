@@ -21,6 +21,31 @@
  *
  * None of those appear in the process harness, and all of them are what actually goes wrong
  * when you point agents at shared state.
+ *
+ * ## Guardrails: look before you spend, and stop if it goes wrong
+ *
+ *   --dry-run         Print the projection for exactly this run (N, topology, model, fanout and
+ *                     this harness's own --concurrency, default 20, passed to project() in
+ *                     cost-model.mjs) and exit 0. No credential, no SDK, no call. Also says
+ *                     whether @anthropic-ai/sdk is installed.
+ *   --max-spend <usd> A ceiling, enforced twice:
+ *                       1. Before any call: if the projected cost exceeds the ceiling, print both
+ *                          figures and exit 3 having made zero calls. This is a projection, so
+ *                          it is only as good as the model.
+ *                       2. During the run: once the MEASURED cost of completed calls (real
+ *                          token usage, priced as report() prices it) exceeds the ceiling, no
+ *                          new call starts, in-flight calls finish, and the run exits 1. The
+ *                          overshoot is at most --concurrency calls. This is the guarantee that
+ *                          does not depend on the projection being right.
+ *
+ * Exit codes:
+ *   0  ran and passed (or --dry-run printed its projection)
+ *   1  ran and failed the oracle, or stopped by the spend ceiling mid-run
+ *   2  bad arguments, missing credentials or SDK, or a model whose price is unknown
+ *   3  refused before any call: projected cost exceeds --max-spend
+ *
+ * The SDK retries 429/529 twice by default and this file adds no retry layer. --concurrency is
+ * the knob for rate limits. An errored call is recorded and costs nothing here.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -28,6 +53,7 @@ import process from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { verify } from './verify.mjs';
 import { MODELS as PRICING_MODELS, warnIfPricingStale } from './pricing.mjs';
+import { project } from './cost-model.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(here, '..');
@@ -182,6 +208,8 @@ export async function runAgents({
   numbers = shuffled(agents),
   now = Date.now,
   fanout = 10,
+  maxSpend,
+  model = PRICING_MODELS.haiku.id,
 }) {
   if (!IMPLEMENTED_TOPOLOGIES.includes(topology)) {
     throw new Error(`Unknown topology: ${topology}`);
@@ -190,7 +218,14 @@ export async function runAgents({
     throw new Error(`--fanout must be an integer >= 2, got ${fanout}`);
   }
 
+  if (maxSpend !== undefined) {
+    if (!(typeof maxSpend === 'number' && maxSpend > 0)) throw new Error(`maxSpend must be a positive number, got ${maxSpend}`);
+    model = MODELS[model] ?? model;
+    if (!Object.hasOwn(PRICE, model)) throw new Error(`maxSpend needs a known model id to price calls, got ${JSON.stringify(model)}`);
+  }
+
   const usage = { input: 0, output: 0, calls: 0 };
+  let stopped; // set once measured spend exceeds maxSpend; no new call starts after that
   const rejected = []; // harness refused the reply
   const errored = []; // the call itself failed
   const faults = []; // solo only: what was wrong inside a reply that did parse (model findings)
@@ -209,6 +244,7 @@ export async function runAgents({
    * `accepted`; reject() downgrades it, which is why the reply keeps a reference to it.
    */
   async function ask(agent, prompt, maxTokens, role = 'leaf', level = 0) {
+    if (stopped !== undefined) return null; // ceiling reached: not started, not recorded, not an error
     const t0 = now();
     const rec = {
       agent: String(agent), role, level,
@@ -241,9 +277,19 @@ export async function runAgents({
     rec.stopReason = reply?.stopReason ?? null;
     usage.input += rec.inputTokens;
     usage.output += rec.outputTokens;
+    checkCeiling();
     const text = String(reply?.text ?? '').trim();
     rec.valuesOut = extractIntegers(text).length;
     return { text, stopReason: reply?.stopReason, rec };
+  }
+
+  /** Measured, not projected: priced from the tokens completed calls actually used. */
+  function checkCeiling() {
+    if (maxSpend === undefined || stopped !== undefined) return;
+    const spent = costOf(model, usage);
+    if (spent > maxSpend * (1 + 1e-9)) {
+      stopped = `spend ceiling $${maxSpend} reached after ${usage.calls} calls ($${spent.toFixed(4)} spent)`;
+    }
   }
 
   function reject(agent, reply, reason) {
@@ -407,8 +453,8 @@ export async function runAgents({
 
   const elapsed = (now() - started) / 1000;
   const result = verify(file, Array.from({ length: agents }, (_, i) => i + 1));
-  const ok = result.ok && rejected.length === 0 && errored.length === 0;
-  return { ok, oracle: result, usage, rejected, errored, faults, participants, levels, elapsed, calls };
+  const ok = result.ok && rejected.length === 0 && errored.length === 0 && stopped === undefined;
+  return { ok, stopped, oracle: result, usage, rejected, errored, faults, participants, levels, elapsed, calls };
 }
 
 /* ------------------------------ call records ----------------------------------------- */
@@ -514,7 +560,7 @@ export async function anthropicTransport(model) {
 
 /* ---------------------------------- CLI ---------------------------------------------- */
 
-export function report({ topology, model, agents, outcome, fanout }) {
+export function report({ topology, model, agents, outcome, fanout, concurrency }) {
   const { usage, oracle, rejected, errored, elapsed } = outcome;
   const cost = costOf(model, usage);
   const lines = [
@@ -530,6 +576,9 @@ export function report({ topology, model, agents, outcome, fanout }) {
     const mid = Math.floor(ms.length / 2);
     const median = ms.length % 2 ? ms[mid] : (ms[mid - 1] + ms[mid]) / 2;
     lines.splice(5, 0, `latency  median ${Math.round(median)}ms  p95 ${Math.round(percentile(ms, 95))}ms  per call`);
+  }
+  if (outcome.stopped) {
+    lines.push(`stopped   ${outcome.stopped}${concurrency !== undefined ? `; up to ${concurrency} further calls may have been in flight` : ''}`);
   }
   if (outcome.levels) {
     lines.push('what each level was shown (integers in prompt / in reply, measured per call):');
@@ -556,7 +605,29 @@ export function report({ topology, model, agents, outcome, fanout }) {
   return lines.join('\n');
 }
 
-async function main(argv) {
+/** `sdk  installed` / `sdk  not installed`, decided by actually importing it. Makes no call. */
+async function sdkLine() {
+  try {
+    await import('@anthropic-ai/sdk');
+    return 'sdk  installed';
+  } catch (error) {
+    if (error?.code === 'ERR_MODULE_NOT_FOUND') return 'sdk  not installed (run npm install)';
+    return `sdk  present but failed to load: ${error?.message ?? error}`;
+  }
+}
+
+/** The projection lines, from project() with this harness's own concurrency. */
+function projectionLines(p, concurrency) {
+  return [
+    `projected  calls ${p.calls}  tokens ${p.input} in / ${p.output} out  cost $${p.cost.toFixed(4)}  time ${p.seconds.toFixed(1)}s  (concurrency ${concurrency})`,
+  ];
+}
+
+/**
+ * The CLI, exported so tests can drive it in-process. `deps.transport`, if given, replaces the
+ * mock/Anthropic choice (and the credential check) so a test can count calls.
+ */
+export async function main(argv, deps = {}) {
   warnIfPricingStale();
   const arg = (flag, fallback) => {
     const index = argv.indexOf(`--${flag}`);
@@ -587,8 +658,60 @@ async function main(argv) {
     return 2;
   }
 
+  const dryRun = argv.includes('--dry-run');
+  let maxSpend;
+  if (argv.includes('--max-spend')) {
+    const raw = arg('max-spend');
+    maxSpend = raw === undefined || raw.startsWith('--') || raw.trim() === '' ? NaN : Number(raw);
+    if (!(Number.isFinite(maxSpend) && maxSpend > 0)) {
+      console.error(`--max-spend needs a positive number of dollars, got ${raw === undefined ? 'nothing' : JSON.stringify(raw)}`);
+      return 2;
+    }
+  }
+
+  if (dryRun || maxSpend !== undefined) {
+    // Everything here is arithmetic and an import probe: no credential, no transport, no call.
+    const alias = Object.keys(PRICING_MODELS).find((a) => a === modelName || PRICING_MODELS[a].id === modelName);
+    if (alias === undefined) {
+      console.error('pricing  unknown model id; cost cannot be projected');
+      return 2;
+    }
+    let p;
+    try {
+      p = project({ agents, model: alias, kind: 'api', topology, concurrency });
+    } catch (error) {
+      console.error(error.message);
+      return 2;
+    }
+    const over = maxSpend !== undefined && p.cost > maxSpend;
+    if (dryRun) {
+      const lines = [
+        `dry run   ${topology}   ${p.model}   ${agents} agents${topology === 'hierarchical' ? `   fanout ${fanout}` : ''}   kind api`,
+        ...projectionLines(p, concurrency),
+        await sdkLine(),
+      ];
+      if (maxSpend !== undefined) {
+        lines.push(over
+          ? `ceiling   $${maxSpend} is below the projected $${p.cost.toFixed(4)}; a real run would be refused (exit 3)`
+          : `ceiling   $${maxSpend} is above the projected $${p.cost.toFixed(4)}; a real run would proceed`);
+      }
+      lines.push('no calls made');
+      console.log(lines.join('\n'));
+      return 0;
+    }
+    if (over) {
+      console.error(
+        `refused   projected cost $${p.cost.toFixed(4)} exceeds --max-spend $${maxSpend} ` +
+          `(${topology}, ${p.model}, ${agents} agents, concurrency ${concurrency}); no calls made`,
+      );
+      return 3;
+    }
+  }
+
   let call;
-  if (mock !== undefined) {
+  if (deps.transport) {
+    call = deps.transport;
+  } else if (mock !== undefined) {
     try {
       call = mockTransport(mock);
     } catch (error) {
@@ -608,11 +731,12 @@ async function main(argv) {
     }
   }
 
-  const outcome = await runAgents({ topology, agents, call, file, concurrency, fanout });
+  const outcome = await runAgents({ topology, agents, call, file, concurrency, fanout, maxSpend, model });
   const label = mock !== undefined ? `mock:${mock}` : model;
   console.log(report({
     topology, model: label, agents, outcome,
     fanout: topology === 'hierarchical' ? fanout : undefined,
+    concurrency,
   }));
   if (record !== undefined) {
     fs.mkdirSync(path.dirname(path.resolve(record)), { recursive: true });

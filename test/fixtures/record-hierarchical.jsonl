@@ -1,0 +1,24 @@
+# SYNTHETIC FIXTURE: hand-authored for test/compare.test.mjs, NOT a measurement. No API call produced it.
+# Every call obeys ms = 1500 + 10 * outputTokens exactly, so a correct fit must return 1500 ms and 100 tokens/s.
+# It validates compare.mjs arithmetic only; it cannot validate any constant in cost-model.mjs.
+# Shape: hierarchical, 12 agents, fanout 3, 19 calls. Generated once, then committed as-is.
+{"agent":"0","role":"leaf","level":0,"startedMs":0,"ms":1520,"inputTokens":45,"outputTokens":2,"stopReason":"end_turn","outcome":"accepted","valuesIn":1,"valuesOut":1}
+{"agent":"5","role":"leaf","level":0,"startedMs":0,"ms":1520,"inputTokens":45,"outputTokens":2,"stopReason":"end_turn","outcome":"accepted","valuesIn":1,"valuesOut":1}
+{"agent":"10","role":"leaf","level":0,"startedMs":0,"ms":1520,"inputTokens":45,"outputTokens":2,"stopReason":"end_turn","outcome":"accepted","valuesIn":1,"valuesOut":1}
+{"agent":"1","role":"leaf","level":0,"startedMs":1,"ms":1520,"inputTokens":45,"outputTokens":2,"stopReason":"end_turn","outcome":"accepted","valuesIn":1,"valuesOut":1}
+{"agent":"6","role":"leaf","level":0,"startedMs":1,"ms":1520,"inputTokens":45,"outputTokens":2,"stopReason":"end_turn","outcome":"accepted","valuesIn":1,"valuesOut":1}
+{"agent":"11","role":"leaf","level":0,"startedMs":1,"ms":1520,"inputTokens":45,"outputTokens":2,"stopReason":"end_turn","outcome":"accepted","valuesIn":1,"valuesOut":1}
+{"agent":"2","role":"leaf","level":0,"startedMs":2,"ms":1520,"inputTokens":45,"outputTokens":2,"stopReason":"end_turn","outcome":"accepted","valuesIn":1,"valuesOut":1}
+{"agent":"7","role":"leaf","level":0,"startedMs":2,"ms":1520,"inputTokens":45,"outputTokens":2,"stopReason":"end_turn","outcome":"accepted","valuesIn":1,"valuesOut":1}
+{"agent":"3","role":"leaf","level":0,"startedMs":3,"ms":1520,"inputTokens":45,"outputTokens":2,"stopReason":"end_turn","outcome":"accepted","valuesIn":1,"valuesOut":1}
+{"agent":"8","role":"leaf","level":0,"startedMs":3,"ms":1520,"inputTokens":45,"outputTokens":2,"stopReason":"end_turn","outcome":"accepted","valuesIn":1,"valuesOut":1}
+{"agent":"4","role":"leaf","level":0,"startedMs":4,"ms":1520,"inputTokens":45,"outputTokens":2,"stopReason":"end_turn","outcome":"accepted","valuesIn":1,"valuesOut":1}
+{"agent":"9","role":"leaf","level":0,"startedMs":4,"ms":1520,"inputTokens":45,"outputTokens":2,"stopReason":"end_turn","outcome":"accepted","valuesIn":1,"valuesOut":1}
+{"agent":"L1.0","role":"merger","level":1,"startedMs":1524,"ms":1560,"inputTokens":51,"outputTokens":6,"stopReason":"end_turn","outcome":"accepted","valuesIn":3,"valuesOut":3}
+{"agent":"L1.3","role":"merger","level":1,"startedMs":1526,"ms":1560,"inputTokens":51,"outputTokens":6,"stopReason":"end_turn","outcome":"accepted","valuesIn":3,"valuesOut":3}
+{"agent":"L1.1","role":"merger","level":1,"startedMs":1527,"ms":1560,"inputTokens":51,"outputTokens":6,"stopReason":"end_turn","outcome":"accepted","valuesIn":3,"valuesOut":3}
+{"agent":"L1.2","role":"merger","level":1,"startedMs":1527,"ms":1560,"inputTokens":51,"outputTokens":6,"stopReason":"end_turn","outcome":"accepted","valuesIn":3,"valuesOut":3}
+{"agent":"L2.1","role":"merger","level":2,"startedMs":3089,"ms":1560,"inputTokens":51,"outputTokens":6,"stopReason":"end_turn","outcome":"accepted","valuesIn":3,"valuesOut":3}
+{"agent":"L2.0","role":"merger","level":2,"startedMs":3089,"ms":1680,"inputTokens":63,"outputTokens":18,"stopReason":"end_turn","outcome":"accepted","valuesIn":9,"valuesOut":9}
+{"agent":"L3.0","role":"root","level":3,"startedMs":4771,"ms":1740,"inputTokens":69,"outputTokens":24,"stopReason":"end_turn","outcome":"accepted","valuesIn":12,"valuesOut":12}
+{"summary":true,"topology":"hierarchical","model":"claude-haiku-4-5","agents":12,"fanout":3,"concurrency":20,"calls":19,"inputTokens":927,"outputTokens":96,"costUsd":0.001407,"elapsedMs":6511.3,"ok":true}
