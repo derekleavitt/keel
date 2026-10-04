@@ -220,7 +220,7 @@ test('every flag and SORTLAB_ variable read by the source is documented, and eve
     for (const m of text.matchAll(/\b(?:arg|num|numberArg)\(\s*'([a-z][a-z-]*)'/g)) flags.add(m[1]);
     for (const m of text.matchAll(/argv\.includes\(\s*'--([a-z][a-z-]*)'/g)) flags.add(m[1]);
   }
-  const expected = ['agents', 'strategy', 'trials', 'delay', 'slow', 'slow-ms', 'faulty', 'fault', 'crash-at', 'timeout', 'keep', 'work', 'crossover', 'verbose', 'fanout', 'mock', 'out', 'model', 'topology', 'concurrency'];
+  const expected = ['agents', 'strategy', 'trials', 'delay', 'slow', 'slow-ms', 'faulty', 'fault', 'crash-at', 'timeout', 'keep', 'work', 'crossover', 'verbose', 'fanout', 'mock', 'out', 'model', 'topology', 'concurrency', 'record', 'dry-run', 'max-spend'];
   for (const flag of expected) assert.ok(flags.has(flag), `flag extraction missed --${flag}; the regexes need updating`);
 
   // worker.mjs's own --file/--value/--hang are internal: run.mjs spawns it, nobody types them.
@@ -318,4 +318,270 @@ test('open section: mock exists, real measurement needs credentials, answered it
   // table is labelled a projection and the real-agents section says no call was ever made.
   assert.ok(section('What it costs').includes('**These are projections, not measurements**'));
   assert.ok(section('Running real agents').includes('It has never made a real API call'));
+});
+
+/* ---- concurrency: the condition the headline result depends on ------------------------- */
+
+const cost20 = node([src('cost-model.mjs'), '--agents', '100', '--concurrency', '20']);
+const crossover20 = node([src('cost-model.mjs'), '--agents', '100', '--crossover', '--concurrency', '20']);
+
+test('concurrency table: unlimited and concurrency-20 times match the tool, cell for cell', async () => {
+  const unlimited = await costTable;
+  const limited = await cost20;
+  assert.equal(limited.code, 0);
+  const times = (stdout) => {
+    const out = {};
+    for (const line of stdout.split('\n')) {
+      const m = line.match(/^(api|claude-code)\s+(\S+)\s+\d+\s+\d+\s+\d+\s+\$\d+\.\d+\s+(\S+)$/);
+      if (m) out[`${m[1]} ${m[2]}`] = m[3];
+    }
+    return out;
+  };
+  const u = times(unlimited.stdout);
+  const l = times(limited.stdout);
+  assert.equal(Object.keys(l).length, KIND_NAMES.length * TOPOLOGY_NAMES.length);
+  assert.ok(readme.includes('node src/cost-model.mjs --agents 100 --concurrency 20'));
+  // The concurrency table is the second one in the section: the first is the cost table.
+  const text = section('What it costs');
+  const tables = text.split('\n\n').filter((b) => /^\| kind \| topology \| unlimited/.test(b));
+  assert.equal(tables.length, 1, 'README has no concurrency table');
+  const rows = tableRows(tables[0]);
+  assert.equal(rows.length, Object.keys(l).length);
+  for (const [kind, topology, unl, lim] of rows) {
+    assert.equal(unl, u[`${kind} ${topology}`], `${kind} ${topology} unlimited`);
+    assert.equal(lim, l[`${kind} ${topology}`], `${kind} ${topology} at concurrency 20`);
+  }
+  // Library check, and the claims in the prose that rest on these numbers.
+  const secs = (topology, concurrency) => project({ agents: 100, kind: 'api', topology, concurrency }).seconds;
+  const fmt = (x) => (x < 100 ? `${x.toFixed(1)}s` : `${Math.round(x)}s`);
+  assert.equal(l['api partitioned'], fmt(secs('partitioned', 20)));
+  assert.ok(secs('partitioned', 20) > secs('solo', 20), 'partitioned must lose to solo at the harness default');
+  const flat = text.replace(/\s+/g, ' ');
+  assert.ok(flat.includes(`so it is ${l['api partitioned']} as API calls against \`solo\`'s ${l['api solo']}`));
+  // "at least 50 calls in flight": the smallest concurrency where partitioned beats solo.
+  let breakeven;
+  for (let c = 1; c <= 100; c += 1) {
+    if (secs('partitioned', c) < secs('solo', c)) { breakeven = c; break; }
+  }
+  assert.ok(flat.includes(`faster only when at least ${breakeven} calls can be in flight`), `README must say the breakeven is ${breakeven}`);
+  assert.ok(flat.includes('`src/agents.mjs` keeps at most 20 calls in flight by default'));
+  assert.match(fs.readFileSync(src('agents.mjs'), 'utf8'), /arg\('concurrency', 20\)/);
+  // The cost-model default really is unlimited, and the README says the first table assumes it.
+  assert.equal(project({ agents: 100 }).seconds, project({ agents: 100, concurrency: Infinity }).seconds);
+  assert.ok(flat.includes('The ~time column assumes unlimited concurrency'));
+});
+
+test('concurrency-20 crossover table equals `--crossover --concurrency 20`, and the prose thresholds are the tool\'s', async () => {
+  const { code, stdout } = await crossover20;
+  assert.equal(code, 0);
+  const found = {};
+  let kind;
+  for (const line of stdout.split('\n')) {
+    const k = line.match(/^kind: (\S+)/);
+    if (k) kind = k[1];
+    const m = line.match(/^\s+(\S+) beats solo on time(?: at work >= (\d+)|: never within sweep)/);
+    if (m) (found[kind] ??= {})[m[1]] = m[2] === undefined ? 'never' : `work >= ${m[2]}`;
+  }
+  assert.ok(readme.includes('node src/cost-model.mjs --agents 100 --crossover --concurrency 20'));
+  const text = section('Where distribution wins on time');
+  const tables = text.split('\n\n').filter((b) => /^\| topology \| api \| claude-code \|/.test(b));
+  assert.equal(tables.length, 2, 'expected the default and the concurrency-20 crossover tables');
+  const rows = tableRows(tables[1]);
+  assert.equal(rows.length, TOPOLOGY_NAMES.length - 1);
+  for (const [topology, api, cc] of rows) {
+    assert.equal(api, found.api[topology], `api ${topology} at concurrency 20`);
+    assert.equal(cc, found['claude-code'][topology], `claude-code ${topology} at concurrency 20`);
+  }
+  // The two tables must actually differ for partitioned, or the correction is empty.
+  const first = tableRows(tables[0]);
+  assert.notEqual(first.find((r) => r[0] === 'partitioned')[1], rows.find((r) => r[0] === 'partitioned')[1]);
+  // The prose names the api and claude-code partitioned thresholds.
+  const flat = text.replace(/\s+/g, ' ');
+  const n = (s) => s.match(/\d+/)[0];
+  assert.ok(flat.includes(`needs at least ${n(found.api.partitioned)} tokens of real work per agent as API calls, and ${n(found['claude-code'].partitioned)} as Claude Code agents`));
+  assert.ok(flat.includes('This table holds only at unlimited concurrency'));
+  assert.match(stdout, /every topology cost >= solo at all \d+ sweep points/);
+});
+
+/* ---- the agent harness guardrails: flags, exit codes, record, compare ------------------ */
+
+const dryRun = node([src('agents.mjs'), '--agents', '100', '--topology', 'partitioned', '--model', 'haiku', '--dry-run']);
+const refused = node([src('agents.mjs'), '--agents', '100', '--topology', 'partitioned', '--max-spend', '0.01']);
+const dryRunBadModel = node([src('agents.mjs'), '--agents', '5', '--model', 'no-such-model', '--dry-run']);
+const badSpend = node([src('agents.mjs'), '--agents', '5', '--max-spend', 'lots']);
+const mockRejected = node([src('agents.mjs'), '--agents', '3', '--mock', 'empty', '--out', path.join(scratch, 'rej.txt')]);
+const recordFile = path.join(scratch, 'mock-record.jsonl');
+const mockWithCeiling = node([
+  src('agents.mjs'), '--agents', '4', '--mock', 'clean', '--max-spend', '0.01',
+  '--out', path.join(scratch, 'ceil.txt'), '--record', recordFile,
+]);
+const compareMock = mockWithCeiling.then(() => node([src('compare.mjs'), recordFile]));
+const comparePartitioned = node([src('compare.mjs'), path.join(root, 'test', 'fixtures', 'record-partitioned.jsonl')]);
+const compareHierarchical = node([src('compare.mjs'), path.join(root, 'test', 'fixtures', 'record-hierarchical.jsonl')]);
+
+test('--dry-run: the documented block is the tool\'s first two lines; the SDK line reports a real import attempt', async () => {
+  const { code, stdout } = await dryRun;
+  assert.equal(code, 0);
+  const lines = stdout.trimEnd().split('\n');
+  const block = readme.match(/```\n(dry run .*\nprojected .*)\n```/);
+  assert.ok(block, 'README dry-run block not found');
+  assert.deepEqual(block[1].split('\n'), lines.slice(0, 2));
+  assert.match(lines[2], /^sdk +(installed|not installed \(run npm install\))/);
+  assert.equal(lines.at(-1), 'no calls made');
+  // The projection printed is project() at the harness concurrency, not at unlimited.
+  const p = project({ agents: 100, model: 'haiku', kind: 'api', topology: 'partitioned', concurrency: 20 });
+  assert.ok(lines[1].includes(`cost $${p.cost.toFixed(4)}`));
+  assert.ok(lines[1].includes(`time ${p.seconds.toFixed(1)}s`));
+  assert.ok(lines[1].endsWith('(concurrency 20)'));
+  assert.ok(readme.replace(/\s+/g, ' ').includes('`--dry-run` reports whether the SDK is present by attempting the import'));
+  assert.match(fs.readFileSync(src('agents.mjs'), 'utf8'), /import\('@anthropic-ai\/sdk'\)/);
+});
+
+test('npm install is required: the SDK is a declared dependency and the README says to install it before a real run', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  assert.ok(pkg.dependencies['@anthropic-ai/sdk']);
+  const real = section('Running real agents');
+  assert.ok(real.includes('npm install'));
+  assert.ok(real.indexOf('npm install') < real.indexOf('ANTHROPIC_API_KEY=...'), '`npm install` must come before the real-run command');
+  assert.ok(real.includes('only the `api` kind'));
+  assert.ok(real.includes('claude-code'));
+  assert.ok(real.includes('It has never made a real API call'));
+});
+
+test('--max-spend: preflight refusal text and exit 3, bad value exit 2, mock run cannot trip the mid-run ceiling', async () => {
+  const r = await refused;
+  assert.equal(r.code, 3);
+  assert.equal(r.stdout, '');
+  const quoted = readme.match(/^(refused {3}projected cost .*)$/m);
+  assert.ok(quoted, 'README refusal line not found');
+  assert.equal(quoted[1], r.stderr.trimEnd());
+  assert.equal((await badSpend).code, 2);
+  assert.equal((await dryRunBadModel).code, 2);
+
+  const m = await mockWithCeiling;
+  assert.equal(m.code, 0, m.stdout + m.stderr);
+  assert.match(m.stdout, /tokens\s+0 in \/ 0 out/);
+
+  const flat = section('Running real agents').replace(/\s+/g, ' ');
+  for (const phrase of [
+    'it is enforced twice',
+    'This compares one projection with a number you chose',
+    'This check does not use the projection, so it holds even if the model is wrong',
+    'the overshoot is bounded at that many calls',
+    'Under `--mock` this check can never trip, because mock calls report zero tokens',
+  ]) assert.ok(flat.includes(phrase), `README lost: ${phrase}`);
+  const text = fs.readFileSync(src('agents.mjs'), 'utf8');
+  assert.match(text, /overshoot is at most --concurrency calls/);
+});
+
+test('exit-code table: 0, 1, 2 and 3 are what the tool returns', async () => {
+  const rows = tableRows(section('Running real agents').slice(section('Running real agents').indexOf('| code | meaning |')));
+  assert.deepEqual(rows.map((r) => r[0]), ['0', '1', '2', '3']);
+  assert.equal((await dryRun).code, 0);
+  assert.equal((await mockRejected).code, 1, 'an oracle failure must exit 1');
+  assert.equal((await badMock).code, 2);
+  assert.equal((await refused).code, 3);
+  const text = fs.readFileSync(src('agents.mjs'), 'utf8');
+  for (const doc of [/0  ran and passed/, /1  ran and failed the oracle, or stopped by the spend ceiling mid-run/, /3  refused before any call/]) {
+    assert.match(text, doc, 'the source header no longer describes the exit codes the README table does');
+  }
+});
+
+test('--record and compare.mjs: a mock record is refused, fixtures print their banner, the three states appear', async () => {
+  const record = fs.readFileSync(recordFile, 'utf8').trimEnd().split('\n').map((l) => JSON.parse(l));
+  const summary = record.at(-1);
+  assert.equal(summary.summary, true);
+  assert.ok(summary.model.startsWith('mock:'));
+  assert.equal(summary.inputTokens, 0);
+  assert.equal(record.length - 1, summary.calls);
+
+  const refusedMock = await compareMock;
+  assert.equal(refusedMock.code, 2);
+  assert.match(refusedMock.stderr, /record is from a mock run/);
+  assert.equal(refusedMock.stdout, '');
+
+  const part = await comparePartitioned;
+  const hier = await compareHierarchical;
+  assert.equal(part.code, 0);
+  assert.equal(hier.code, 0);
+  for (const out of [part.stdout, hier.stdout]) assert.match(out, /SYNTHETIC RECORD/);
+  const states = new Set([...(part.stdout + hier.stdout).matchAll(/^ {4}(measured|upper-bound|not-identifiable):/gm)].map((m) => m[1]));
+  assert.deepEqual([...states].sort(), ['measured', 'not-identifiable', 'upper-bound']);
+  // Partitioned identifies the intercept (as an upper bound) and not the slope.
+  assert.match(part.stdout, /latencyMs[^\n]*\n {4}upper-bound:/);
+  assert.match(part.stdout, /outputTokensPerSecond[^\n]*measured -[^\n]*\n {4}not-identifiable:/);
+  assert.match(hier.stdout, /outputTokensPerSecond[^\n]*\n {4}measured:/);
+  // One-variable fit folds prefill into the intercept.
+  assert.match(hier.stdout, /prefill is folded into the intercept/);
+
+  const flat = readme.replace(/\s+/g, ' ');
+  for (const phrase of ['`measured`', '`upper-bound`', '`not-identifiable`', 'it identifies the intercept and nothing else', 'A mock record is refused outright with exit 2', 'SYNTHETIC RECORD banner', 'LATENCY` and `OUTPUT_TOKENS_PER_SECOND` are the intercept and slope']) {
+    assert.ok(flat.includes(phrase), `README lost: ${phrase}`);
+  }
+  // The flags are read by the source, and the fixtures the README names are on disk.
+  for (const f of ['test/fixtures/record-partitioned.jsonl', 'test/fixtures/record-hierarchical.jsonl']) assert.ok(readme.includes(f) && fs.existsSync(path.join(root, f)));
+});
+
+/* ---- what this cannot measure ---------------------------------------------------------- */
+
+test('"what this cannot measure": each limitation is still true of the code', async () => {
+  const limits = section('What this cannot measure').replace(/\s+/g, ' ');
+  const { ASSUMPTIONS } = await import('../src/cost-model.mjs');
+  const { UNCHECKED } = await import('../src/compare.mjs');
+
+  // OVERHEAD.api: README says 200 assumed, 45 implied; the live tool prints both.
+  const part = await comparePartitioned;
+  const hier = await compareHierarchical;
+  for (const out of [part.stdout, hier.stdout]) {
+    const m = out.match(/^overhead\.api\s+assumed (\d+)\s+measured (\d+)/m);
+    assert.ok(m);
+    assert.equal(Number(m[1]), ASSUMPTIONS.OVERHEAD.api);
+    assert.ok(limits.includes(`may be ${m[2]} rather than the assumed ${m[1]}`), 'README must state the overhead the fixtures imply');
+    assert.ok(limits.includes(`a factor of about ${(m[1] / m[2]).toFixed(1)}`));
+  }
+
+  // Four machine-readable keys, named; three structural assumptions that are prose only.
+  assert.deepEqual(Object.keys(ASSUMPTIONS).sort(), ['LATENCY', 'OUTPUT_TOKENS_PER_SECOND', 'OVERHEAD', 'TOKENS_PER_NUMBER']);
+  assert.ok(limits.includes('`ASSUMPTIONS` has four machine-readable keys'));
+  assert.ok(readme.includes('`OVERHEAD`, `TOKENS_PER_NUMBER`,\n`OUTPUT_TOKENS_PER_SECOND`, `LATENCY`'));
+  for (const marker of [/50\/50/, /prefill/, /untimed/]) assert.ok(UNCHECKED.some((u) => marker.test(u)), `compare.mjs no longer lists ${marker}`);
+  assert.ok(limits.includes('Three further structural assumptions'));
+  assert.ok(limits.includes('(50/50)') && limits.includes('the partitioned merge, which is untimed and unpriced'));
+
+  // project() ignores fanout: hierarchical at fanout 3 and at the default give the same tree.
+  const withFanout = project({ agents: 12, topology: 'hierarchical', fanout: 3 });
+  const without = project({ agents: 12, topology: 'hierarchical' });
+  assert.equal(withFanout.calls, without.calls, 'project() now honours fanout: update the T-020 paragraph in the README');
+  assert.match(fs.readFileSync(src('cost-model.mjs'), 'utf8'), /hierarchical: \(n, fanout = 10\)/);
+  assert.ok(limits.includes('hardcodes the hierarchical fanout at 10'));
+  assert.ok(limits.includes('tracked as T-020'));
+  assert.ok(fs.existsSync(path.join(root, '.orchestration', 'tasks', 'T-020.md')));
+  assert.match(fs.readFileSync(src('compare.mjs'), 'utf8'), /project\(\) has no fanout parameter/);
+
+  // Not streamed: the one-variable fit says it folds prefill into the intercept.
+  assert.match(hier.stdout, /latencyMs[^\n]*\n {4}upper-bound: intercept of a one-variable fit: includes input prefill/);
+  assert.ok(limits.includes('Calls are not streamed'));
+
+  // The surviving race: both tests exist, one lists runs/, the other writes there.
+  const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
+  assert.match(read('test/hierarchical.test.mjs'), /readdirSync\(path\.join\(root, 'runs'\)\)/);
+  assert.match(read('test/run-isolation.test.mjs'), /runs\//);
+  assert.ok(limits.includes('`test/hierarchical.test.mjs` lists everything in `runs/`'));
+  assert.ok(limits.includes('`test/run-isolation.test.mjs` writes there'));
+
+  // Said at the point of use, not once: the sections that quote agent figures label them.
+  assert.ok(limits.includes('There is no credential in this environment, and no real run has ever happened'));
+  assert.ok(section('Running real agents').includes('Every agent figure in this README is a projection'));
+  assert.ok(section('What it costs').includes('**These are projections, not measurements**'));
+  assert.ok(section('Where distribution wins on time').replace(/\s+/g, ' ').includes('All of these are projections'));
+});
+
+test('Open section: "Measure it" gives the procedure in order, and the overhead constant is named', () => {
+  const open = section('Open');
+  const at = ['--dry-run', '--record', 'compare.mjs'].map((s) => open.indexOf(s));
+  assert.ok(at.every((i) => i !== -1), 'Open must mention --dry-run, --record and compare.mjs');
+  assert.ok(at[0] < at[1] && at[1] < at[2], 'Open must mention them in that order');
+  const flat = open.replace(/\s+/g, ' ');
+  assert.ok(flat.includes('the model assumes 200 input tokens per call'));
+  assert.doesNotMatch(open, /probably wrong somewhere/);
 });
