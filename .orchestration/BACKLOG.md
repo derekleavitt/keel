@@ -14,6 +14,30 @@
 > path**: `runs/trial-<i>.txt` was shared by every concurrent run, found because six agents were
 > working at once. T-007 fixed it unprompted; T-013 records what is left to assert.
 >
+> **Second wave complete.** T-004, T-005, T-008, T-013 ran concurrently, again partitioned by
+> `owns:` and again with no agent writing outside its lane. `npm test` is 109/109, `npm run check`
+> is clean, and all four strategies behave as the README claims.
+>
+> **The project's central question is answered.** `--crossover` at N=100 on Haiku: `partitioned`
+> beats one agent at work >= 0; `hierarchical` at work >= 7 tokens per agent for API calls and
+> >= 33 for Claude Code agents (the gap is spin-up); `shared-lock` never, because its deficit is
+> N rounds of latency and more work never closes a constant. The cost claim held at all 20 sweep
+> points across N from 2 to 1000, two kinds and two models — no topology ever cost less than solo.
+>
+> Three things the wave surfaced. T-008 found a **second** lock bug beyond the one in the README:
+> release was unconditional, so a holder slower than `STALE_MS` would wake, write over the new
+> holder's data, and delete the new holder's lock on the way out. Its conclusion after fixing it is
+> worth keeping — the remaining windows cannot be closed, so the strategy is mitigated rather than
+> sound, and `append` (where contention cannot arise) is still the real answer. T-005 added a
+> `--mock` transport, so the agent pipeline is now testable without credentials even though the
+> headline numbers still cannot be measured here. T-013 verified the group-file isolation was
+> already safe and was explicit that its pid-reuse conclusion rests on reading the cleanup code,
+> because a test cannot force a child's pid.
+>
+> One task-level conflict, surfaced not hidden: T-008's acceptance required a slow-holder run to
+> exit 0, which is impossible if a worker that loses its lock simply dies. It added a bounded retry
+> and said so. The task note it departed from is the one that needs revising.
+
 > One dispatcher error worth recording: the T-003 brief told it to fix per-token latency, which
 > contradicted its own task note deferring that to T-004. The agent surfaced the conflict rather
 > than silently choosing. T-004 has been re-scoped.

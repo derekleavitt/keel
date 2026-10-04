@@ -18,6 +18,8 @@
  *   --fault <crash|hang>        what a faulty worker does (default crash)
  *   --crash-at <ms>             when a crashing worker dies (default 10)
  *   --timeout <ms>              SIGKILL anything still running after this long (default 30000)
+ *   --keep                      keep trial files after passing and print a `file:` line per trial
+ *                               (used by tests to observe output paths; off by default)
  *
  * Faulty workers' values are excluded from the oracle's expected set: a worker that was
  * supposed to die has not promised anything. If its value shows up in the file anyway the
@@ -67,6 +69,7 @@ const faulty = num('faulty', 0, { integer: true });
 const fault = arg('fault', 'crash');
 const crashAt = num('crash-at', 10);
 const timeout = num('timeout', 30_000, { min: 1 });
+const keep = process.argv.includes('--keep');
 
 if (!/^[a-z0-9_-]+$/i.test(strategy) || !fs.existsSync(path.join(here, 'strategies', `${strategy}.mjs`))) {
   bad(`unknown --strategy "${strategy}"`);
@@ -181,7 +184,7 @@ async function trial(index) {
     errored: errored.length,
   };
   // Per-process file names mean concurrent invocations never share state; tidy up after passing.
-  if (kept && errored.length === 0) {
+  if (kept && errored.length === 0 && !keep) {
     for (const name of fs.readdirSync(path.dirname(file))) {
       if (name.startsWith(`trial-${process.pid}-${index}.txt`)) fs.rmSync(path.join(path.dirname(file), name), { force: true });
     }
@@ -221,6 +224,8 @@ if (slow || faulty) {
       `crashed: ${sum('crashed')}   hung (killed): ${sum('hung')}   errored: ${sum('errored')}\n`,
   );
 }
+
+if (keep) for (const result of results) if (result.file) console.log(`file: ${result.file}`);
 
 for (const [index, result] of results.entries()) {
   if (result.ok) continue;

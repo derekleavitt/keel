@@ -43,71 +43,200 @@
  * And the expiry is load-bearing: without it a crashed holder blocks everyone forever, with
  * it a slow holder can have its lock taken while it still believes it owns it. That problem
  * arrived because of the lock. The naive strategy didn't have it, and neither does `append`.
+ *
+ * ## Stolen locks (the second bug, found by reading the code, not by running it)
+ *
+ * The version above stored only a timestamp and released unconditionally. A holder slower than
+ * the staleness timeout had its lock taken by a waiter; on waking it (a) wrote its stale
+ * read-modify-write over the new holder's data and (b) `unlink`ed the lock, which by then
+ * belonged to the *new* holder, admitting a third worker while the second still believed it
+ * held the lock. Nothing tested any of it, partly because `STALE_MS` was a ten-second constant.
+ *
+ * Now the lock is `<pid>:<random token>:<timestamp>` and a holder only acts on a lock whose
+ * token is its own:
+ *
+ *   - Before publishing its result it re-reads the lock. Not ours: throw `LockLostError`
+ *     having written nothing. The data file is written to a temp name and renamed in after
+ *     that check, so the check-to-publish window is two syscalls, not the whole critical section.
+ *   - `release` re-reads and unlinks only if the token matches; otherwise `LockLostError`.
+ *   - `contribute` treats a loss *before* the write as retryable (nothing happened; reacquire
+ *     and redo the work, up to `attempts`), and a loss *after* the write as fatal, because
+ *     redoing would duplicate the value. The worker then exits non-zero.
+ *
+ * `SORTLAB_STALE_MS` and `SORTLAB_RETRY_MS` override the timings so theft can be provoked in
+ * milliseconds. They are read at call time.
+ *
+ * ## Test hook
+ *
+ * `contribute({ ..., stallAfterAcquire: ms })` sleeps *while holding the lock*, after the read
+ * and before the write. This is the "hang while holding" injection the runner cannot do from
+ * outside: a runner flag can pass it through to the worker (not wired yet).
+ *
+ * ## What stays best-effort
+ *
+ * POSIX has no compare-and-unlink. The ownership check and the write/unlink that follows are
+ * separate syscalls, and the stale-reclaim path (read old content, re-read to confirm it is
+ * unchanged, unlink) can still delete a fresh lock if it lands inside that gap. These windows
+ * are narrowed to microseconds, not closed. A lock with an expiry cannot be made fully safe
+ * against a holder that outlives it; the layout that cannot contend (`append`) is the real fix.
  */
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import process from 'node:process';
 
 export const name = 'lockfile';
 
-const STALE_MS = 10_000;
-const RETRY_MS = 5;
+export class LockLostError extends Error {
+  constructor(message, { wrote = false } = {}) {
+    super(message);
+    this.name = 'LockLostError';
+    this.wrote = wrote;
+  }
+}
 
-async function acquire(lockPath) {
-  const scratch = `${lockPath}.${process.pid}`;
+function envMs(key, fallback) {
+  const n = Number(process.env[key]);
+  return process.env[key] !== undefined && process.env[key].trim() !== '' && Number.isFinite(n) && n >= 0
+    ? n
+    : fallback;
+}
+export const staleMs = () => envMs('SORTLAB_STALE_MS', 10_000);
+export const retryMs = () => envMs('SORTLAB_RETRY_MS', 5);
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Returns { token, since } or null if unparseable (callers must treat null as "held"). */
+function parse(content) {
+  const parts = content.trim().split(':');
+  if (parts.length !== 3) return null;
+  const since = Number(parts[2]);
+  if (!/^\d+$/.test(parts[0]) || parts[1] === '' || !Number.isFinite(since) || since <= 0) return null;
+  return { token: parts[1], since };
+}
+
+function readLock(lockPath) {
+  try {
+    return fs.readFileSync(lockPath, 'utf8');
+  } catch (error) {
+    if (error.code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
+/** Take the lock; resolves to the token that proves ownership. */
+export async function acquire(lockPath) {
+  const token = crypto.randomBytes(8).toString('hex');
+  const scratch = `${lockPath}.${process.pid}.${token}`;
 
   for (;;) {
-    // Content first, in a file only this process knows about.
-    fs.writeFileSync(scratch, String(Date.now()));
+    // Content first, in a file only this acquisition knows about.
+    fs.writeFileSync(scratch, `${process.pid}:${token}:${Date.now()}`);
 
     try {
       // Atomic, and fails if the target exists. The lock appears fully formed or not at all.
       fs.linkSync(scratch, lockPath);
       fs.unlinkSync(scratch);
-      return;
+      return token;
     } catch (error) {
       fs.unlinkSync(scratch);
       if (error.code !== 'EEXIST') throw error;
 
-      try {
-        const heldSince = Number(fs.readFileSync(lockPath, 'utf8').trim());
-        // Fail closed. Unparseable means "I don't know", and the only safe reading of "I
-        // don't know" is that somebody is holding it.
-        if (Number.isFinite(heldSince) && heldSince > 0 && Date.now() - heldSince > STALE_MS) {
-          fs.unlinkSync(lockPath);
-          continue;
+      const seen = readLock(lockPath);
+      const parsed = seen === null ? null : parse(seen);
+      // Fail closed. Unparseable means "I don't know", and the only safe reading of "I
+      // don't know" is that somebody is holding it.
+      if (parsed && Date.now() - parsed.since > staleMs()) {
+        // Re-read and compare so we don't delete a lock replaced since we looked. Not atomic:
+        // see header.
+        if (readLock(lockPath) === seen) {
+          try {
+            fs.unlinkSync(lockPath);
+          } catch {
+            // Already gone.
+          }
         }
-      } catch {
-        // Released between our link attempt and our read. Retry.
+        continue;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, RETRY_MS + Math.random() * RETRY_MS));
+      await sleep(retryMs() + Math.random() * retryMs());
     }
   }
 }
 
-export async function contribute({ file, value, delay }) {
+function holdsLock(lockPath, token) {
+  const content = readLock(lockPath);
+  return content !== null && parse(content)?.token === token;
+}
+
+/** Release only a lock we still hold; throws LockLostError if it is no longer ours. */
+export function release(lockPath, token) {
+  if (!holdsLock(lockPath, token)) {
+    throw new LockLostError(`lock ${lockPath} is no longer held by token ${token}`);
+  }
+  fs.unlinkSync(lockPath);
+}
+
+async function attempt({ file, value, delay, stallAfterAcquire }) {
   const lockPath = `${file}.lock`;
-  await acquire(lockPath);
+  const token = await acquire(lockPath);
+  let wrote = false;
 
   try {
     const raw = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
     const values =
-    raw.trim() === '' ? [] : raw.trim().split(',').map((field) => Number(field.trim()));
+      raw.trim() === '' ? [] : raw.trim().split(',').map((field) => Number(field.trim()));
 
     // The same window the naive strategy loses to. Held under the lock it is harmless, which
     // is why both strategies are measured with the same delay.
-    if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+    if (delay > 0) await sleep(delay);
+    if (stallAfterAcquire > 0) await sleep(stallAfterAcquire);
 
     values.push(value);
     values.sort((a, b) => a - b);
-    fs.writeFileSync(file, values.join(','));
-  } finally {
-    // `finally`, so a throw inside the critical section doesn't wedge everyone else until the
-    // staleness timeout.
+
+    const tmp = `${file}.${token}.tmp`;
+    fs.writeFileSync(tmp, values.join(','));
     try {
-      fs.unlinkSync(lockPath);
-    } catch {
-      // Already gone — somebody treated us as stale. Nothing useful to do here.
+      if (!holdsLock(lockPath, token)) {
+        throw new LockLostError(`lock stolen before write of ${value}; nothing written`);
+      }
+      fs.renameSync(tmp, file);
+      wrote = true;
+    } finally {
+      fs.rmSync(tmp, { force: true });
+    }
+  } catch (error) {
+    // Do not release a lock that is not ours; only free it if we still hold it.
+    if (!(error instanceof LockLostError) && holdsLock(lockPath, token)) {
+      try {
+        fs.unlinkSync(lockPath);
+      } catch {
+        // Gone already.
+      }
+    }
+    throw error;
+  }
+
+  try {
+    release(lockPath, token);
+  } catch (error) {
+    if (error instanceof LockLostError) {
+      throw new LockLostError(`lock lost after writing ${value}; write may have raced`, { wrote });
+    }
+    throw error;
+  }
+}
+
+export async function contribute({ file, value, delay, stallAfterAcquire = 0, attempts = 5 }) {
+  for (let n = 1; ; n += 1) {
+    try {
+      return await attempt({ file, value, delay, stallAfterAcquire });
+    } catch (error) {
+      // Lost before writing: nothing happened, so redo. Lost after: redoing would duplicate.
+      if (error instanceof LockLostError && !error.wrote && n < attempts && /nothing written/.test(error.message)) {
+        continue;
+      }
+      throw error;
     }
   }
 }
