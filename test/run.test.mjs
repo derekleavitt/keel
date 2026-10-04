@@ -1,12 +1,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
-const run = (args) => spawnSync(process.execPath, [path.join(root, 'src/run.mjs'), ...args], { encoding: 'utf8', timeout: 30_000 });
-const worker = (args) => spawnSync(process.execPath, [path.join(root, 'src/worker.mjs'), ...args], { encoding: 'utf8', timeout: 10_000 });
+// The runner writes under <its own root>/runs, and keeps the files of failing trials on purpose.
+// This file runs failing trials deliberately, so it runs the harness from a copy of src/ in a
+// scratch directory: its trials land in <scratch>/runs, never in the real runs/ (which
+// test/hierarchical.test.mjs scans for group files while other tests are running).
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'sortlab-run-'));
+fs.cpSync(path.join(root, 'src'), path.join(scratch, 'src'), { recursive: true });
+test.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+
+const run = (args) => spawnSync(process.execPath, [path.join(scratch, 'src/run.mjs'), ...args], { encoding: 'utf8', timeout: 30_000 });
+const worker = (args) => spawnSync(process.execPath, [path.join(scratch, 'src/worker.mjs'), ...args], { encoding: 'utf8', timeout: 10_000 });
 const medianOf = (out) => Number(/median: (\d+)ms/.exec(out)[1]);
 
 test('append survives two hung workers and finishes under 10s', () => {
@@ -56,7 +66,7 @@ test('worker rejects missing --file and non-numeric --value with exit 2', () => 
 });
 
 test('worker --crash-at exits 3', () => {
-  const r = worker(['--file', path.join(root, 'runs/crash-test.txt'), '--value', '1', '--strategy', 'append', '--delay', '500', '--crash-at', '10']);
+  const r = worker(['--file', path.join(scratch, 'runs/crash-test.txt'), '--value', '1', '--strategy', 'append', '--delay', '500', '--crash-at', '10']);
   assert.equal(r.status, 3);
 });
 

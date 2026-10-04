@@ -182,3 +182,104 @@ test('cli: without --mock and without credentials exits 2 with a credential mess
 test('cli: unknown mock mode exits 2', () => {
   assert.equal(cli('--mock', 'bogus').status, 2);
 });
+
+// Per-call records (T-015) ----------------------------------------------------------------
+
+const CALL_KEYS = ['agent', 'role', 'level', 'startedMs', 'ms', 'inputTokens', 'outputTokens', 'stopReason', 'outcome', 'valuesIn', 'valuesOut'];
+
+/** A clock that advances by `step` ms on every read, so every duration and offset is exact. */
+const steppedClock = (step) => { let t = 1000; return () => { const v = t; t += step; return v; }; };
+
+test('records: scripted clock gives exact startedMs and ms (serial shared-lock)', async () => {
+  const outcome = await runAgents({
+    topology: 'shared-lock', agents: 3, numbers: [2, 1, 3], file: out(),
+    call: mockTransport('clean'), now: steppedClock(10),
+  });
+  // reads: run start, then (before, after) per call => each call lasts 10ms, starts 20ms apart.
+  assert.deepEqual(outcome.calls.map((c) => [c.startedMs, c.ms]), [[10, 10], [30, 10], [50, 10]]);
+  assert.deepEqual(outcome.calls.map((c) => c.agent), ['2', '1', '3']);
+  assert.ok(outcome.calls.every((c) => c.role === 'shared' && c.level === 0 && c.outcome === 'accepted'));
+});
+
+test('records: tokens and stop reason land in the record; throwing call is errored', async () => {
+  let n = 0;
+  const outcome = await runAgents({
+    topology: 'partitioned', agents: 3, numbers: [1, 2, 3], file: out(),
+    call: async (p) => {
+      n += 1;
+      if (n === 2) throw new Error('boom');
+      return { text: String(wanted(p)), inputTokens: 11, outputTokens: 4, stopReason: 'end_turn' };
+    },
+  });
+  assert.equal(outcome.calls.length, outcome.usage.calls + outcome.errored.length);
+  const [a, b, c] = outcome.calls;
+  assert.deepEqual(Object.keys(a), CALL_KEYS);
+  assert.equal(a.inputTokens, 11);
+  assert.equal(a.outputTokens, 4);
+  assert.equal(a.stopReason, 'end_turn');
+  assert.equal(b.outcome, 'errored');
+  assert.equal(b.inputTokens, 0);
+  assert.equal(b.stopReason, null);
+  assert.equal(b.valuesOut, 0);
+  assert.equal(c.outcome, 'accepted');
+});
+
+test('records: rejected replies are marked rejected; string replies carry zero tokens and null stop', async () => {
+  const outcome = await runAgents({
+    topology: 'partitioned', agents: 2, numbers: [1, 2], file: out(),
+    call: async (p) => (wanted(p) === 1 ? '' : '2'),
+  });
+  assert.deepEqual(outcome.calls.map((c) => c.outcome), ['rejected', 'accepted']);
+  assert.ok(outcome.calls.every((c) => c.inputTokens === 0 && c.outputTokens === 0 && c.stopReason === null));
+});
+
+test('records: solo with no integers is rejected; hierarchical roles and levels are recorded', async () => {
+  const solo = await runAgents({ topology: 'solo', agents: 4, call: async () => 'none', file: out() });
+  assert.equal(solo.calls.length, 1);
+  assert.equal(solo.calls[0].role, 'solo');
+  assert.equal(solo.calls[0].outcome, 'rejected');
+
+  const h = await runAgents({ topology: 'hierarchical', agents: 9, fanout: 3, call: mockTransport('clean'), file: out() });
+  const tally = {};
+  for (const c of h.calls) tally[`${c.role}${c.level}`] = (tally[`${c.role}${c.level}`] ?? 0) + 1;
+  assert.deepEqual(tally, { leaf0: 9, merger1: 3, root2: 1 });
+});
+
+test('cli: --record writes 19 call lines + summary for 12 agents / fanout 3, and nothing without it', () => {
+  const rec = path.join(tmp, 'rec', 'run.jsonl');
+  const outFile = out();
+  const env = { ...process.env };
+  delete env.ANTHROPIC_API_KEY;
+  delete env.ANTHROPIC_AUTH_TOKEN;
+  const r = spawnSync(process.execPath, [script, '--agents', '12', '--topology', 'hierarchical', '--fanout', '3', '--mock', 'clean', '--record', rec, '--out', outFile], { encoding: 'utf8', env });
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.match(r.stdout, /time .*\nlatency  median \d+ms  p95 \d+ms  per call\nresult/);
+  const lines = fs.readFileSync(rec, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  assert.equal(lines.length, 20);
+  const calls = lines.slice(0, 19);
+  for (const c of calls) assert.deepEqual(Object.keys(c), CALL_KEYS);
+  assert.equal(calls.filter((c) => c.role === 'leaf' && c.level === 0).length, 12);
+  assert.equal(calls.filter((c) => c.role === 'merger' && c.level === 1).length, 4);
+  assert.equal(calls.filter((c) => c.role === 'merger' && c.level === 2).length, 2);
+  assert.equal(calls.filter((c) => c.role === 'root' && c.level === 3).length, 1);
+  const s = lines[19];
+  assert.deepEqual(Object.keys(s), ['summary', 'topology', 'model', 'agents', 'fanout', 'concurrency', 'calls', 'inputTokens', 'outputTokens', 'costUsd', 'elapsedMs', 'ok']);
+  assert.equal(s.summary, true);
+  assert.equal(s.model, 'mock:clean');
+  assert.equal(s.fanout, 3);
+  assert.equal(s.calls, 19);
+  assert.equal(s.costUsd, 0);
+  assert.equal(s.ok, true);
+
+  // Without --record: only the --out file appears in its directory.
+  const dir = fs.mkdtempSync(path.join(tmp, 'norec-'));
+  const f = path.join(dir, 'only.txt');
+  const r2 = spawnSync(process.execPath, [script, '--agents', '5', '--mock', 'clean', '--out', f], { encoding: 'utf8', env });
+  assert.equal(r2.status, 0);
+  assert.deepEqual(fs.readdirSync(dir), ['only.txt']);
+});
+
+test('cli: --record with no path exits 2', () => {
+  const r = cli('--mock', 'clean', '--record');
+  assert.equal(r.status, 2);
+});

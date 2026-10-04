@@ -195,33 +195,62 @@ export async function runAgents({
   const errored = []; // the call itself failed
   const faults = []; // solo only: what was wrong inside a reply that did parse (model findings)
   const participants = []; // hierarchical only: what each call was actually shown and returned
+  const calls = []; // one record per call attempted, in completion order (see recordLines)
   let levels;
 
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, '');
+  const started = now();
 
-  /** One agent: returns the reply text, or null if the call failed (already recorded). */
-  async function ask(agent, prompt, maxTokens) {
+  /**
+   * One agent: returns the reply text, or null if the call failed (already recorded). Every
+   * call, errored or not, gets a record with its own start time and duration, so a reader can
+   * fit time against output tokens per call instead of from run totals. A record starts as
+   * `accepted`; reject() downgrades it, which is why the reply keeps a reference to it.
+   */
+  async function ask(agent, prompt, maxTokens, role = 'leaf', level = 0) {
+    const t0 = now();
+    const rec = {
+      agent: String(agent), role, level,
+      startedMs: t0 - started,
+      ms: 0,
+      inputTokens: 0, outputTokens: 0, stopReason: null,
+      outcome: 'accepted',
+      valuesIn: extractIntegers(prompt).length,
+      valuesOut: 0,
+    };
     let reply;
     try {
       reply = await call(prompt, maxTokens);
     } catch (error) {
+      rec.ms = Math.max(0, now() - t0);
+      rec.outcome = 'errored';
+      calls.push(rec);
       errored.push({ agent, error: String(error?.message ?? error) });
       return null;
     }
+    rec.ms = Math.max(0, now() - t0);
     usage.calls += 1;
-    if (typeof reply === 'string') return { text: reply.trim() };
-    usage.input += reply?.inputTokens ?? 0;
-    usage.output += reply?.outputTokens ?? 0;
-    return { text: String(reply?.text ?? '').trim(), stopReason: reply?.stopReason };
+    calls.push(rec);
+    if (typeof reply === 'string') {
+      rec.valuesOut = extractIntegers(reply).length;
+      return { text: reply.trim(), rec };
+    }
+    rec.inputTokens = reply?.inputTokens ?? 0;
+    rec.outputTokens = reply?.outputTokens ?? 0;
+    rec.stopReason = reply?.stopReason ?? null;
+    usage.input += rec.inputTokens;
+    usage.output += rec.outputTokens;
+    const text = String(reply?.text ?? '').trim();
+    rec.valuesOut = extractIntegers(text).length;
+    return { text, stopReason: reply?.stopReason, rec };
   }
 
   function reject(agent, reply, reason) {
+    if (reply.rec) reply.rec.outcome = 'rejected';
     const stop = reply.stopReason && reply.stopReason !== 'end_turn' ? ` (stop_reason ${reply.stopReason})` : '';
     rejected.push({ agent, reply: reply.text, reason: reason + stop });
   }
-
-  const started = now();
 
   if (topology === 'solo') {
     /*
@@ -231,7 +260,7 @@ export async function runAgents({
      * oracle reports exactly what is wrong, and `faults` says which kind of wrong it is.
      * Only a reply with no integers at all is a rejection (nothing to write, nothing to guess).
      */
-    const reply = await ask('solo', `Output every integer from 1 to ${agents} in ascending order, comma-separated. Nothing else.`, Math.max(64, agents * 6));
+    const reply = await ask('solo', `Output every integer from 1 to ${agents} in ascending order, comma-separated. Nothing else.`, Math.max(64, agents * 6), 'solo', 0);
     if (reply !== null) {
       let values = extractIntegers(reply.text);
       if (values.length === 0) {
@@ -261,7 +290,7 @@ export async function runAgents({
     };
 
     const leafReplies = await pooled(
-      numbers.map((n) => () => ask(n, `Output the number ${n}. Nothing else.`, 16)),
+      numbers.map((n) => () => ask(n, `Output the number ${n}. Nothing else.`, 16, 'leaf', 0)),
       concurrency,
     );
     let nodes = leafReplies.map((reply, i) => {
@@ -290,6 +319,8 @@ export async function runAgents({
             label,
             `Merge these numbers into one list in ascending order. Output the complete list, comma-separated, nothing else.\n${data}`,
             Math.max(64, input.length * 6),
+            isRoot ? 'root' : 'merger',
+            lvl,
           );
           if (reply === null) return { values: [] };
           record(lvl, isRoot ? 'root' : 'merger', g, group.length, data, reply.text);
@@ -360,6 +391,8 @@ export async function runAgents({
               `Insert ${n} into the correct position. Output the complete new list, ` +
               `comma-separated, nothing else.`,
         Math.max(64, agents * 6),
+        'shared',
+        0,
       );
       if (reply === null) continue;
 
@@ -375,7 +408,42 @@ export async function runAgents({
   const elapsed = (now() - started) / 1000;
   const result = verify(file, Array.from({ length: agents }, (_, i) => i + 1));
   const ok = result.ok && rejected.length === 0 && errored.length === 0;
-  return { ok, oracle: result, usage, rejected, errored, faults, participants, levels, elapsed };
+  return { ok, oracle: result, usage, rejected, errored, faults, participants, levels, elapsed, calls };
+}
+
+/* ------------------------------ call records ----------------------------------------- */
+
+function costOf(model, usage) {
+  const price = PRICE[model] ?? { input: 0, output: 0 };
+  return (usage.input / 1e6) * price.input + (usage.output / 1e6) * price.output;
+}
+
+/**
+ * The `--record` file: one JSON line per call (outcome.calls, already in the documented key
+ * order), then one summary line. `model` is the id or `mock:<mode>`; a reader must refuse to
+ * fit anything whose summary model starts with `mock:` (its tokens are zero by construction).
+ */
+export function recordLines({ topology, model, agents, outcome, fanout, concurrency }) {
+  const lines = outcome.calls.map((c) => JSON.stringify(c));
+  lines.push(JSON.stringify({
+    summary: true,
+    topology,
+    model,
+    agents,
+    fanout: topology === 'hierarchical' ? fanout : null,
+    concurrency,
+    calls: outcome.calls.length,
+    inputTokens: outcome.usage.input,
+    outputTokens: outcome.usage.output,
+    costUsd: costOf(model, outcome.usage),
+    elapsedMs: Math.round(outcome.elapsed * 1e6) / 1e3,
+    ok: outcome.ok,
+  }));
+  return `${lines.join('\n')}\n`;
+}
+
+function percentile(sorted, p) {
+  return sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)];
 }
 
 /* ------------------------------ transports ------------------------------------------- */
@@ -448,8 +516,7 @@ export async function anthropicTransport(model) {
 
 export function report({ topology, model, agents, outcome, fanout }) {
   const { usage, oracle, rejected, errored, elapsed } = outcome;
-  const price = PRICE[model] ?? { input: 0, output: 0 };
-  const cost = (usage.input / 1e6) * price.input + (usage.output / 1e6) * price.output;
+  const cost = costOf(model, usage);
   const lines = [
     `\n${topology}   ${model}   ${agents} agents${fanout !== undefined ? `   fanout ${fanout}` : ''}`,
     `calls    ${usage.calls}`,
@@ -458,6 +525,12 @@ export function report({ topology, model, agents, outcome, fanout }) {
     `time     ${elapsed.toFixed(1)}s`,
     `result   ${outcome.ok ? 'PASS' : 'FAIL'}`,
   ];
+  if (outcome.calls?.length > 0) {
+    const ms = outcome.calls.map((c) => c.ms).sort((a, b) => a - b);
+    const mid = Math.floor(ms.length / 2);
+    const median = ms.length % 2 ? ms[mid] : (ms[mid - 1] + ms[mid]) / 2;
+    lines.splice(5, 0, `latency  median ${Math.round(median)}ms  p95 ${Math.round(percentile(ms, 95))}ms  per call`);
+  }
   if (outcome.levels) {
     lines.push('what each level was shown (integers in prompt / in reply, measured per call):');
     for (const l of outcome.levels) {
@@ -499,7 +572,12 @@ async function main(argv) {
   const file = arg('out', path.join(root, 'runs', `agents-${topology}-${agents}.txt`));
 
   const fanout = Number(arg('fanout', 10));
+  const record = arg('record', undefined);
 
+  if (argv.includes('--record') && (record === undefined || record.startsWith('--'))) {
+    console.error('--record needs a file path');
+    return 2;
+  }
   if (!IMPLEMENTED_TOPOLOGIES.includes(topology)) {
     console.error(`Unknown topology: ${topology}`);
     return 2;
@@ -531,10 +609,15 @@ async function main(argv) {
   }
 
   const outcome = await runAgents({ topology, agents, call, file, concurrency, fanout });
+  const label = mock !== undefined ? `mock:${mock}` : model;
   console.log(report({
-    topology, model: mock !== undefined ? `mock:${mock}` : model, agents, outcome,
+    topology, model: label, agents, outcome,
     fanout: topology === 'hierarchical' ? fanout : undefined,
   }));
+  if (record !== undefined) {
+    fs.mkdirSync(path.dirname(path.resolve(record)), { recursive: true });
+    fs.writeFileSync(record, recordLines({ topology, model: label, agents, outcome, fanout, concurrency }));
+  }
   return outcome.ok ? 0 : 1;
 }
 

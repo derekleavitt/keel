@@ -64,6 +64,7 @@ const TOPOLOGIES = {
     inputPerCall: (i) => 0,
     outputPerCall: (i) => n * TOKENS_PER_NUMBER,
     roundOutputs: [n * TOKENS_PER_NUMBER],
+    roundCalls: [1],
     // One agent does every unit of work itself, so its work is n times one agent's.
     workPerCall: () => n,
     workRounds: [n],
@@ -84,6 +85,7 @@ const TOPOLOGIES = {
     roundOutputs: Array.from({ length: n }, (_, i) => (i + 1) * TOKENS_PER_NUMBER),
     workPerCall: () => 1,
     workRounds: Array.from({ length: n }, () => 1),
+    roundCalls: Array.from({ length: n }, () => 1),
   }),
 
   /**
@@ -99,6 +101,7 @@ const TOPOLOGIES = {
     inputPerCall: () => 0,
     outputPerCall: () => TOKENS_PER_NUMBER,
     roundOutputs: [TOKENS_PER_NUMBER],
+    roundCalls: [n],
     workPerCall: () => 1,
     workRounds: [1],
   }),
@@ -118,6 +121,7 @@ const TOPOLOGIES = {
   hierarchical: (n, fanout = 10) => {
     const merger = []; // numbers covered by each merger, in call order, after the n leaves
     const roundOutputs = [TOKENS_PER_NUMBER]; // longest call in each round
+    const roundCalls = [n]; // calls in each round
     let covered = Array.from({ length: n }, () => 1); // numbers under each node of the level below
     while (covered.length > 1) {
       const next = [];
@@ -126,6 +130,7 @@ const TOPOLOGIES = {
       }
       merger.push(...next);
       roundOutputs.push(Math.max(...next) * TOKENS_PER_NUMBER);
+      roundCalls.push(next.length);
       covered = next;
     }
     return {
@@ -133,6 +138,7 @@ const TOPOLOGIES = {
       inputPerCall: (i) => (i < n ? 0 : merger[i - n] * TOKENS_PER_NUMBER),
       outputPerCall: (i) => (i < n ? TOKENS_PER_NUMBER : merger[i - n] * TOKENS_PER_NUMBER),
       roundOutputs,
+      roundCalls,
       // Only the leaves do the real work; mergers just merge, and their cost is topology overhead.
       workPerCall: (i) => (i < n ? 1 : 0),
       workRounds: roundOutputs.map((_, k) => (k === 0 ? 1 : 0)),
@@ -142,6 +148,20 @@ const TOPOLOGIES = {
 
 /** Fixed round-trip latency per call (connection, queueing, time to first token), seconds. */
 const LATENCY = { api: 1.5, 'claude-code': 8 };
+
+/**
+ * Every constant the headline numbers rest on, in one inspectable place. Each is a guess, not
+ * a measurement; a fit against a real run should adjust these. Also assumed, but structural
+ * rather than numeric (see project()): `work` splits 50/50 between input and output, input
+ * prefill time is ignored, and the partitioned merge is ordinary code that is neither timed
+ * nor priced.
+ */
+export const ASSUMPTIONS = Object.freeze({
+  OVERHEAD: Object.freeze(OVERHEAD),
+  TOKENS_PER_NUMBER,
+  OUTPUT_TOKENS_PER_SECOND,
+  LATENCY: Object.freeze(LATENCY),
+});
 
 export const TOPOLOGY_NAMES = Object.keys(TOPOLOGIES);
 export const MODEL_NAMES = Object.keys(MODELS);
@@ -161,7 +181,10 @@ function lookup(table, key, what) {
  * with agents x work; distributed topologies do `work` per agent, concurrently where they can.
  * Merge steps that are agents add no work of their own.
  */
-export function project({ agents, model = 'haiku', kind = 'api', topology = 'partitioned', work = 0 }) {
+export function project({ agents, model = 'haiku', kind = 'api', topology = 'partitioned', work = 0, concurrency = Infinity }) {
+  if (typeof concurrency !== 'number' || Number.isNaN(concurrency) || concurrency <= 0) {
+    throw new Error(`invalid concurrency ${JSON.stringify(concurrency)}; must be a positive number or Infinity`);
+  }
   if (typeof work !== 'number' || !Number.isFinite(work) || work < 0) {
     throw new Error(`invalid work ${JSON.stringify(work)}; must be a non-negative number of tokens`);
   }
@@ -195,16 +218,25 @@ export function project({ agents, model = 'haiku', kind = 'api', topology = 'par
   /*
    * Wall-clock is the sum over rounds of that round's slowest call. A call takes fixed latency
    * plus the time to generate its output, so duration scales with the tokens the call emits.
-   * Calls inside a round are assumed fully concurrent; real runs hit rate limits and
-   * connection caps, so treat this as a floor. Input prefill time is ignored.
+   * Calls inside a round are concurrent up to `concurrency` (default unlimited); real runs
+   * hit rate limits and connection caps, so treat the default as a floor. Input prefill time is ignored.
    */
   const rounds = shape.roundOutputs.length;
+  /*
+   * With at most `concurrency` calls in flight, a round of k calls runs as ceil(k / concurrency)
+   * sequential waves, each as slow as the round's slowest call. Infinity gives one wave per
+   * round, the unlimited-concurrency model. This is a floor on the wave count: it assumes
+   * perfect packing and no rate-limit backoff.
+   */
+  const waveCounts = shape.roundCalls.map((k) => Math.max(1, Math.ceil(k / concurrency)));
+  const waves = waveCounts.reduce((a, b) => a + b, 0);
   const seconds = shape.roundOutputs.reduce(
-    (sum, out, k) => sum + latency + (out + (work / 2) * shape.workRounds[k]) / OUTPUT_TOKENS_PER_SECOND,
+    (sum, out, k) =>
+      sum + waveCounts[k] * (latency + (out + (work / 2) * shape.workRounds[k]) / OUTPUT_TOKENS_PER_SECOND),
     0,
   );
 
-  return { topology, model: price.id, kind, agents, calls: shape.calls, input, output, cost, seconds, rounds, overhead, work };
+  return { topology, model: price.id, kind, agents, calls: shape.calls, input, output, cost, seconds, rounds, waves, overhead, work };
 }
 
 /** Upper end of the crossover sweep, tokens of work per agent. */
@@ -219,8 +251,8 @@ export const SWEEP_WORKS = [0, ...[1, 10, 100, 1000, 10_000, 100_000].flatMap((d
  * grows faster in work than any distributed topology's whenever agents > 1, so the gap only
  * widens and bisection is valid.
  */
-export function crossover({ agents, model = 'haiku', kind = 'api' }) {
-  const secs = (topology, work) => project({ agents, model, kind, topology, work }).seconds;
+export function crossover({ agents, model = 'haiku', kind = 'api', concurrency = Infinity }) {
+  const secs = (topology, work) => project({ agents, model, kind, topology, work, concurrency }).seconds;
   return TOPOLOGY_NAMES.filter((t) => t !== 'solo').map((topology) => {
     const wins = (w) => secs(topology, w) < secs('solo', w);
     let at = null;
@@ -245,13 +277,14 @@ const CROSSOVER_NOTES = {
   'shared-lock': 'N serial rounds each add latency; solo pays the same work once. Never catches up.',
 };
 
-function runCrossover(agents, model) {
-  console.log(`\nCrossover for ${agents} agents, model ${MODELS[model].id}   (projection, not measurement)`);
+function runCrossover(agents, model, concurrency) {
+  const cc = concurrency === Infinity ? '' : `, concurrency ${concurrency}`;
+  console.log(`\nCrossover for ${agents} agents, model ${MODELS[model].id}${cc}   (projection, not measurement)`);
   console.log(`work = input+output tokens of real work per agent; swept 0..${MAX_SWEEP_WORK}\n`);
   let violations = 0;
   for (const kind of KIND_NAMES) {
     console.log(`kind: ${kind}`);
-    for (const c of crossover({ agents, model, kind })) {
+    for (const c of crossover({ agents, model, kind, concurrency })) {
       console.log(
         c.at === null
           ? `  ${c.topology} beats solo on time: never within sweep`
@@ -261,7 +294,7 @@ function runCrossover(agents, model) {
     }
     console.log('\n  work/agent  ' + TOPOLOGY_NAMES.map((t) => t.padStart(13)).join(' '));
     for (const work of SWEEP_WORKS) {
-      const rows = TOPOLOGY_NAMES.map((topology) => project({ agents, model, kind, topology, work }));
+      const rows = TOPOLOGY_NAMES.map((topology) => project({ agents, model, kind, topology, work, concurrency }));
       const solo = rows[0];
       for (const r of rows) if (r.cost < solo.cost) violations += 1;
       if ([0, 10, 100, 1000, 10_000, 100_000, MAX_SWEEP_WORK].includes(work)) {
@@ -292,21 +325,28 @@ export function run() {
   const model = arg('model', 'haiku');
   const verbose = process.argv.includes('--verbose');
   const work = Number(arg('work', 0));
+  let concurrency = Infinity;
+  if (process.argv.includes('--concurrency')) {
+    concurrency = Number(arg('concurrency', ''));
+    if (arg('concurrency', '') === '' || !Number.isFinite(concurrency) || concurrency <= 0) {
+      throw new Error(`invalid --concurrency ${JSON.stringify(arg('concurrency', undefined))}; must be a positive number`);
+    }
+  }
   if (process.argv.includes('--crossover')) {
     lookup(MODELS, model, 'model');
-    runCrossover(agents, model);
+    runCrossover(agents, model, concurrency);
     return;
   }
 
   const rows = [];
   for (const kind of KIND_NAMES) {
     for (const topology of TOPOLOGY_NAMES) {
-      rows.push(project({ agents, model, kind, topology, work }));
+      rows.push(project({ agents, model, kind, topology, work, concurrency }));
     }
   }
 
   console.log(`\nProjected cost for ${agents} agents contributing 1..${agents}`);
-  console.log(`model: ${rows[0].model}   (projection, not measurement)${work > 0 ? `   work: ${work} tokens/agent` : ''}\n`);
+  console.log(`model: ${rows[0].model}   (projection, not measurement)${work > 0 ? `   work: ${work} tokens/agent` : ''}${concurrency === Infinity ? '' : `   concurrency: ${concurrency}`}\n`);
 
   console.log('kind          topology       calls    tokens in   tokens out       cost     ~time');
   console.log('─'.repeat(84));

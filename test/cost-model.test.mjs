@@ -103,3 +103,54 @@ test('CLI with odd N prints no fractional tokens', () => {
   assert.equal(r.status, 0);
   assert.doesNotMatch(r.stdout, /\d\.5\b/);
 });
+
+test('ASSUMPTIONS exposes the constants the model computes with, frozen and pinned', async () => {
+  const { ASSUMPTIONS } = await import('../src/cost-model.mjs');
+  assert.deepEqual(Object.keys(ASSUMPTIONS).sort(), ['LATENCY', 'OUTPUT_TOKENS_PER_SECOND', 'OVERHEAD', 'TOKENS_PER_NUMBER']);
+  assert.ok(Object.isFrozen(ASSUMPTIONS));
+  for (const k of ['api', 'claude-code']) {
+    assert.equal(typeof ASSUMPTIONS.OVERHEAD[k], 'number');
+    assert.equal(typeof ASSUMPTIONS.LATENCY[k], 'number');
+  }
+  assert.equal(ASSUMPTIONS.OUTPUT_TOKENS_PER_SECOND, 100);
+  assert.equal(ASSUMPTIONS.TOKENS_PER_NUMBER, 2.5);
+});
+
+test('roundCalls sums to calls for every topology', () => {
+  for (const n of [1, 7, 100, 1000]) {
+    for (const topology of TOPOLOGY_NAMES) {
+      const r = project({ agents: n, topology });
+      // waves with concurrency 1 is the sum of roundCalls, which must equal calls
+      assert.equal(project({ agents: n, topology, concurrency: 1 }).waves, r.calls, `${topology} N=${n}`);
+      assert.equal(r.waves, r.rounds, 'unlimited concurrency is one wave per round');
+    }
+  }
+});
+
+test('concurrency validation and its effect on shared-lock and solo', () => {
+  for (const bad of [0, -1, NaN, '20', null]) {
+    assert.throws(() => project({ agents: 5, concurrency: bad }), /concurrency/, String(bad));
+  }
+  assert.doesNotThrow(() => project({ agents: 5, concurrency: Infinity }));
+  for (const topology of ['solo', 'shared-lock']) {
+    assert.equal(
+      project({ agents: 100, topology, concurrency: 1 }).seconds,
+      project({ agents: 100, topology, concurrency: Infinity }).seconds,
+    );
+  }
+  const a = project({ agents: 100, topology: 'partitioned' });
+  assert.equal(a.rounds, 1);
+  assert.equal(project({ agents: 100, topology: 'partitioned', concurrency: 20 }).waves, 5);
+});
+
+test('CLI --concurrency 20 prints 7.6s for api partitioned; bad values exit 2 naming the flag', () => {
+  const ok = cli('--agents', '100', '--concurrency', '20');
+  assert.equal(ok.status, 0, ok.stderr);
+  const row = ok.stdout.split('\n').find((l) => /^api\s+partitioned/.test(l));
+  assert.match(row, /\s7\.6s$/);
+  for (const bad of ['0', '-1', 'abc']) {
+    const r = cli('--concurrency', bad);
+    assert.equal(r.status, 2, bad);
+    assert.match(r.stderr, /--concurrency/);
+  }
+});

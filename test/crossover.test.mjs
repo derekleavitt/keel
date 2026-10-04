@@ -76,3 +76,39 @@ test('--work 0 leaves cost columns identical; --work changes the cost', () => {
   assert.deepEqual(cols(run('--work', '0')), cols(run()));
   assert.notDeepEqual(cols(run('--work', '500')), cols(run()));
 });
+
+test('concurrency decides the headline: partitioned loses to solo at 20 in flight, wins again at 50 (N=100, api)', () => {
+  const secs = (topology, concurrency) => project({ agents: 100, kind: 'api', topology, concurrency }).seconds;
+  const solo = secs('solo', Infinity);
+  assert.equal(solo, 4);
+  // unlimited: one wave of 1.525s
+  assert.ok(Math.abs(secs('partitioned', Infinity) - 1.525) < 1e-9);
+  // 20 in flight: ceil(100/20) = 5 waves x 1.525s = 7.625s > 4.0s
+  assert.ok(Math.abs(secs('partitioned', 20) - 7.625) < 1e-9);
+  assert.ok(secs('partitioned', 20) > solo);
+  // 50 in flight: 2 waves x 1.525s = 3.05s < 4.0s; 49 in flight is 3 waves, 4.575s: still loses
+  assert.ok(Math.abs(secs('partitioned', 50) - 3.05) < 1e-9);
+  assert.ok(secs('partitioned', 50) < solo);
+  assert.ok(secs('partitioned', 49) > solo);
+});
+
+test('crossover respects concurrency: exact, and partitioned no longer wins at zero work', () => {
+  for (const kind of KIND_NAMES) {
+    const base = Object.fromEntries(crossover({ agents: 100, kind }).map((c) => [c.topology, c]));
+    assert.equal(base.partitioned.at, 0);
+    const at20 = Object.fromEntries(crossover({ agents: 100, kind, concurrency: 20 }).map((c) => [c.topology, c]));
+    const p = at20.partitioned.at;
+    assert.ok(p > 0, `${kind}: partitioned must lose at zero work with 20 in flight`);
+    const secs = (topology, work) => project({ agents: 100, kind, topology, work, concurrency: 20 }).seconds;
+    assert.ok(secs('partitioned', p) < secs('solo', p));
+    assert.ok(secs('partitioned', p - 1) >= secs('solo', p - 1));
+  }
+});
+
+test('--crossover --concurrency 20 header mentions it; default header does not', () => {
+  const run = (...a) => spawnSync(process.execPath, [CLI, '--agents', '100', '--crossover', ...a], { encoding: 'utf8' });
+  const c = run('--concurrency', '20');
+  assert.equal(c.status, 0, c.stderr);
+  assert.match(c.stdout, /concurrency 20/);
+  assert.doesNotMatch(run().stdout, /concurrency/);
+});
