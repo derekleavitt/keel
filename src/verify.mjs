@@ -13,10 +13,15 @@
  */
 import fs from 'node:fs';
 import process from 'node:process';
+import { pathToFileURL } from 'node:url';
 
 export function verify(path, expected) {
-  const raw = fs.existsSync(path) ? fs.readFileSync(path, 'utf8').trim() : '';
+  const exists = fs.existsSync(path);
+  const raw = exists ? fs.readFileSync(path, 'utf8').trim() : '';
   const failures = [];
+
+  // A missing file is not the same thing as an empty one; say so.
+  if (!exists) failures.push(`file not found: ${path}`);
 
   // One line. Two means somebody appended with a newline and broke the format.
   const lines = raw.split('\n').filter((line) => line.trim() !== '');
@@ -40,8 +45,8 @@ export function verify(path, expected) {
 
   // Sorted.
   for (let i = 1; i < values.length; i += 1) {
-    const previous = values[i - 1] ?? 0;
-    const current = values[i] ?? 0;
+    const previous = values[i - 1];
+    const current = values[i];
     if (previous > current) {
       failures.push(`out of order at position ${i + 1}: ${previous} then ${current}`);
       break;
@@ -75,7 +80,18 @@ export function verify(path, expected) {
   return { ok: failures.length === 0, failures, found: values.length, expected: expected.length };
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Compare as URLs: import.meta.url is percent-encoded, a raw `file://${argv[1]}` is not, so
+// paths containing a space silently never matched and the CLI printed nothing (false PASS).
+function isMain() {
+  if (!process.argv[1]) return false;
+  try {
+    return pathToFileURL(fs.realpathSync(process.argv[1])).href === import.meta.url;
+  } catch {
+    return pathToFileURL(process.argv[1]).href === import.meta.url;
+  }
+}
+
+if (isMain()) {
   const [, , file = 'numbers.txt', count = '10'] = process.argv;
   const expected = Array.from({ length: Number(count) }, (_, i) => i + 1);
   const result = verify(file, expected);

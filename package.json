@@ -2,5 +2,10 @@
   "name": "sortlab",
   "private": true,
   "type": "module",
-  "scripts": { "start": "node src/run.mjs" }
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node src/run.mjs",
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "check": "for f in src/*.mjs src/strategies/*.mjs; do node --check \"$f\" || exit 1; done"
+  }
 }

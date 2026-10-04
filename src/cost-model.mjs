@@ -5,6 +5,9 @@
  *   node src/cost-model.mjs --agents 100
  *   node src/cost-model.mjs --agents 100 --model haiku --verbose
  *
+ * --verbose adds one line under each row: the fixed overhead per call, the average input and
+ * output per call, and the number of sequential rounds the time figure is built from.
+ *
  * These are projections, not measurements. Every number here comes from published per-token
  * pricing and an explicit token estimate, and it is labelled that way on purpose — the point
  * is to decide whether a run is worth paying for, then compare the real numbers against it.
@@ -16,7 +19,9 @@
  * Across N agents that's the difference between O(N²) and O(N) total tokens — so the
  * coordination strategy is a cost decision before it's ever a correctness one.
  */
+import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 
 /** Published per-million-token rates. Input, output. */
 const MODELS = {
@@ -43,6 +48,13 @@ const OVERHEAD = {
 const TOKENS_PER_NUMBER = 2.5;
 
 /**
+ * Generation speed, output tokens per second. An assumption, not a measurement: it is what
+ * makes a call's duration depend on the work it does. A model that must emit N numbers cannot
+ * do so in constant time, and without this term no topology could ever beat `solo` on time.
+ */
+const OUTPUT_TOKENS_PER_SECOND = 100;
+
+/**
  * How much context each agent needs, and how many rounds the work takes.
  *
  * `rounds` is what turns into wall-clock: agents inside one round run concurrently, rounds
@@ -57,7 +69,7 @@ const TOPOLOGIES = {
     calls: 1,
     inputPerCall: (i) => 0,
     outputPerCall: (i) => n * TOKENS_PER_NUMBER,
-    rounds: 1,
+    roundOutputs: [n * TOKENS_PER_NUMBER],
   }),
 
   /**
@@ -71,7 +83,8 @@ const TOPOLOGIES = {
     calls: n,
     inputPerCall: (i) => i * TOKENS_PER_NUMBER,
     outputPerCall: (i) => (i + 1) * TOKENS_PER_NUMBER,
-    rounds: n,
+    // One call per round, so each round's longest call is that call: round i writes i+1 numbers.
+    roundOutputs: Array.from({ length: n }, (_, i) => (i + 1) * TOKENS_PER_NUMBER),
   }),
 
   /**
@@ -86,51 +99,94 @@ const TOPOLOGIES = {
     calls: n,
     inputPerCall: () => 0,
     outputPerCall: () => TOKENS_PER_NUMBER,
-    rounds: 1,
+    roundOutputs: [TOKENS_PER_NUMBER],
   }),
 
   /**
-   * Agents in groups of `fanout`, each group merged by an agent, then merged again.
+   * Agents in groups of `fanout`, each group merged by an agent, then those merged by
+   * further agents, until one root merger holds everything.
    *
-   * The interesting middle: agents still do the merging, so it isn't a code shortcut, but no
-   * agent sees more than `fanout` numbers. Cost is O(N) with a constant, and rounds are
-   * logarithmic rather than linear.
+   * Level 0 is N leaf agents holding one number each. Each later level has ceil(count/fanout)
+   * mergers; a merger reads the numbers its children produced and writes the merged run, so
+   * its input and output are both (numbers under it) x TOKENS_PER_NUMBER. Every merger sees at
+   * most `fanout` children, but a merger at height h covers up to fanout^h numbers, and the
+   * root reads all N. There are ceil(log_fanout N) merge levels and every level handles all N
+   * numbers once, so total tokens are O(N log_fanout N), not O(N). What stays small is the
+   * number of children per agent, not the number of tokens.
    */
   hierarchical: (n, fanout = 10) => {
-    const groups = Math.ceil(n / fanout);
+    const merger = []; // numbers covered by each merger, in call order, after the n leaves
+    const roundOutputs = [TOKENS_PER_NUMBER]; // longest call in each round
+    let covered = Array.from({ length: n }, () => 1); // numbers under each node of the level below
+    while (covered.length > 1) {
+      const next = [];
+      for (let i = 0; i < covered.length; i += fanout) {
+        next.push(covered.slice(i, i + fanout).reduce((a, b) => a + b, 0));
+      }
+      merger.push(...next);
+      roundOutputs.push(Math.max(...next) * TOKENS_PER_NUMBER);
+      covered = next;
+    }
     return {
-      calls: n + groups + 1,
-      inputPerCall: (i) => (i < n ? 0 : fanout * TOKENS_PER_NUMBER),
-      outputPerCall: (i) => (i < n ? TOKENS_PER_NUMBER : fanout * TOKENS_PER_NUMBER),
-      rounds: 1 + Math.ceil(Math.log(n) / Math.log(fanout)),
+      calls: n + merger.length,
+      inputPerCall: (i) => (i < n ? 0 : merger[i - n] * TOKENS_PER_NUMBER),
+      outputPerCall: (i) => (i < n ? TOKENS_PER_NUMBER : merger[i - n] * TOKENS_PER_NUMBER),
+      roundOutputs,
     };
   },
 };
 
-/** Round-trip latency for one call, in seconds. A rough constant; measure and replace it. */
+/** Fixed round-trip latency per call (connection, queueing, time to first token), seconds. */
 const LATENCY = { api: 1.5, 'claude-code': 8 };
 
-export function project({ agents, model = 'haiku', kind = 'api', topology = 'partitioned' }) {
-  const price = MODELS[model];
-  const overhead = OVERHEAD[kind];
-  const shape = TOPOLOGIES[topology](agents);
+export const TOPOLOGY_NAMES = Object.keys(TOPOLOGIES);
+export const MODEL_NAMES = Object.keys(MODELS);
+export const KIND_NAMES = Object.keys(OVERHEAD);
 
-  let input = 0;
-  let output = 0;
-  for (let i = 0; i < shape.calls; i += 1) {
-    input += overhead + shape.inputPerCall(i);
-    output += shape.outputPerCall(i);
+function lookup(table, key, what) {
+  if (typeof key !== 'string' || !Object.hasOwn(table, key)) {
+    throw new Error(`unknown ${what} ${JSON.stringify(key)}; valid ${what}s: ${Object.keys(table).join(', ')}`);
   }
+  return table[key];
+}
+
+export function project({ agents, model = 'haiku', kind = 'api', topology = 'partitioned' }) {
+  if (!Number.isInteger(agents) || agents < 1) {
+    throw new Error(`invalid agents ${JSON.stringify(agents)}; must be a positive integer`);
+  }
+  const price = lookup(MODELS, model, 'model');
+  const overhead = lookup(OVERHEAD, kind, 'kind');
+  const latency = LATENCY[kind];
+  const shape = lookup(TOPOLOGIES, topology, 'topology')(agents);
+
+  let rawInput = 0;
+  let rawOutput = 0;
+  for (let i = 0; i < shape.calls; i += 1) {
+    rawInput += overhead + shape.inputPerCall(i);
+    rawOutput += shape.outputPerCall(i);
+  }
+
+  /*
+   * Round to whole tokens. TOKENS_PER_NUMBER is 2.5, so odd N produces half tokens (1452.5)
+   * that no tokenizer or invoice can report. Rounding the totals, not each call, keeps the
+   * error under half a token, and the cost is computed from the rounded figures so every
+   * dollar amount can be reproduced by hand from the printed token counts.
+   */
+  const input = Math.round(rawInput);
+  const output = Math.round(rawOutput);
 
   const cost = (input / 1_000_000) * price.input + (output / 1_000_000) * price.output;
 
   /*
-   * Wall-clock assumes calls inside a round are fully concurrent. Real runs hit rate limits
-   * and connection caps, so treat this as a floor.
+   * Wall-clock is the sum over rounds of that round's slowest call. A call takes fixed latency
+   * plus the time to generate its output, so duration scales with the tokens the call emits.
+   * Calls inside a round are assumed fully concurrent; real runs hit rate limits and
+   * connection caps, so treat this as a floor. Input prefill time is ignored.
    */
-  const seconds = shape.rounds * LATENCY[kind];
+  const rounds = shape.roundOutputs.length;
+  const seconds = shape.roundOutputs.reduce((sum, out) => sum + latency + out / OUTPUT_TOKENS_PER_SECOND, 0);
 
-  return { topology, model: price.id, kind, agents, calls: shape.calls, input, output, cost, seconds };
+  return { topology, model: price.id, kind, agents, calls: shape.calls, input, output, cost, seconds, rounds, overhead };
 }
 
 function arg(flag, fallback) {
@@ -138,26 +194,36 @@ function arg(flag, fallback) {
   return index === -1 ? fallback : process.argv[index + 1];
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+function formatSeconds(s) {
+  return s < 100 ? `${s.toFixed(1)}s` : `${Math.round(s)}s`;
+}
+
+export function run() {
   const agents = Number(arg('agents', 100));
   const model = arg('model', 'haiku');
-
-  console.log(`\nProjected cost for ${agents} agents contributing 1..${agents}`);
-  console.log(`model: ${MODELS[model].id}   (projection, not measurement)\n`);
+  const verbose = process.argv.includes('--verbose');
 
   const rows = [];
-  for (const kind of ['api', 'claude-code']) {
-    for (const topology of Object.keys(TOPOLOGIES)) {
+  for (const kind of KIND_NAMES) {
+    for (const topology of TOPOLOGY_NAMES) {
       rows.push(project({ agents, model, kind, topology }));
     }
   }
+
+  console.log(`\nProjected cost for ${agents} agents contributing 1..${agents}`);
+  console.log(`model: ${rows[0].model}   (projection, not measurement)\n`);
 
   console.log('kind          topology       calls    tokens in   tokens out       cost     ~time');
   console.log('─'.repeat(84));
   for (const r of rows) {
     console.log(
-      `${r.kind.padEnd(13)} ${r.topology.padEnd(14)} ${String(r.calls).padStart(5)}  ${String(r.input).padStart(11)}  ${String(Math.round(r.output)).padStart(11)}   ${`$${r.cost.toFixed(4)}`.padStart(9)}  ${`${r.seconds}s`.padStart(8)}`,
+      `${r.kind.padEnd(13)} ${r.topology.padEnd(14)} ${String(r.calls).padStart(5)}  ${String(r.input).padStart(11)}  ${String(r.output).padStart(11)}   ${`$${r.cost.toFixed(4)}`.padStart(9)}  ${formatSeconds(r.seconds).padStart(8)}`,
     );
+    if (verbose) {
+      console.log(
+        `    overhead ${r.overhead}/call, avg ${Math.round(r.input / r.calls)} in / ${Math.round(r.output / r.calls)} out per call, ${r.rounds} rounds`,
+      );
+    }
   }
 
   const solo = rows.find((r) => r.kind === 'api' && r.topology === 'solo');
@@ -166,4 +232,13 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     `\nshared-lock costs ${(shared.cost / solo.cost).toFixed(0)}x what one agent costs, and takes ${(shared.seconds / solo.seconds).toFixed(0)}x as long.`,
   );
   console.log('Distribution is a latency tool. It is never a cost saving.\n');
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
+  try {
+    run();
+  } catch (err) {
+    console.error(`cost-model: ${err.message}`);
+    process.exit(2);
+  }
 }
