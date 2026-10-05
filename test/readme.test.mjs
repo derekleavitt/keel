@@ -313,7 +313,7 @@ test('tests the README cites as pinning a claim exist and still contain that cla
 
 test('open section: mock exists, real measurement needs credentials, answered items are gone', () => {
   const open = section('Open');
-  assert.match(open, /\*\*Measure it\.\*\*/);
+  assert.match(open, /^- Measure it\./m);
   assert.match(open, /--mock/);
   assert.match(open, /API key/);
   assert.doesNotMatch(open, /Non-uniform agents\.\*\*|Failure injection\.\*\*|Where's the crossover/, 'answered items must not be listed as open');
@@ -321,6 +321,67 @@ test('open section: mock exists, real measurement needs credentials, answered it
   // table is labelled a projection and the real-agents section says no call was ever made.
   assert.ok(section('What it costs').includes('**These are projections, not measurements**'));
   assert.ok(section('Running real agents').includes('It has never made a real API call'));
+});
+
+/* ---- mission and architecture: stated as intent, separated from what is measured ------- */
+
+const MEASURED_SECTIONS = ['What it costs', 'Where distribution wins on time', 'The coordination problem, measured', 'Running real agents', 'What this cannot measure'];
+
+test('the mission and architecture sections come first and say they are not built', () => {
+  const at = (h) => readme.indexOf(`\n## ${h}\n`);
+  for (const h of ['The mission', 'What a system like that needs', 'Why the first instrument sorts a list', 'What is built and what is not']) {
+    assert.notEqual(at(h), -1, `README has no "## ${h}" section`);
+    assert.ok(at(h) < at('What it costs'), `"## ${h}" must come before the measured sections`);
+  }
+  assert.ok(section('The mission').includes('This repository does not do that.'));
+  assert.ok(section('What a system like that needs').startsWith('## What a system like that needs\n\nNone of this is built.'));
+  // The architecture cites this file's size as a prototype; that number is counted, not written.
+  const checks = fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').match(/^test\(/gm).length;
+  assert.ok(section('What a system like that needs').includes(`a ${checks}-check prototype`), `README must say this file is a ${checks}-check prototype`);
+  // The status table is the boundary, and the limits section says so.
+  assert.ok(section('What this cannot measure').includes('Nothing above the `What is built and what is not` table is measured by anything'));
+  // No dollar figure or token count appears in the sections that are intent: those belong below the table.
+  for (const h of ['The mission', 'What a system like that needs', 'Why the first instrument sorts a list']) {
+    assert.doesNotMatch(section(h), /\$\d/, `"## ${h}" must not quote a dollar figure`);
+    assert.doesNotMatch(section(h), /^\|/m, `"## ${h}" must not contain a table`);
+  }
+});
+
+test('status table: every state is one of four, every cited path exists, and "not built" cites nothing', () => {
+  const rows = tableRows(section('What is built and what is not'));
+  assert.ok(rows.length >= 10);
+  const states = new Set(['measured', 'projected', 'tested offline', 'not built']);
+  const seen = new Set();
+  for (const [component, state, where] of rows) {
+    assert.ok(states.has(state), `${component}: unknown state "${state}"`);
+    seen.add(state);
+    const paths = [...where.matchAll(/`([^`]+)`/g)].map((m) => m[1]);
+    if (state === 'not built') {
+      assert.equal(where, '—', `${component}: a "not built" row must cite no path`);
+    } else {
+      assert.ok(paths.length > 0, `${component}: a built row must cite where it lives`);
+      for (const p of paths) assert.ok(fs.existsSync(path.join(root, p)), `${component} cites ${p}, which does not exist`);
+    }
+  }
+  assert.deepEqual([...seen].sort(), [...states].sort(), 'the table must use all four states so the legend below it is true');
+  // The flag-table test treats any row beginning with a backticked flag as a flag row; this table has none.
+  for (const [component] of rows) assert.doesNotMatch(component, /^`--/);
+});
+
+test('the measured sections make no claim of scale: swarm words appear only where intent is stated', () => {
+  for (const h of MEASURED_SECTIONS) {
+    assert.doesNotMatch(section(h), /\b(thousands?|millions?|swarms?|infinite)\b/i, `"## ${h}" must not describe scale this code has not run at`);
+    assert.doesNotMatch(section(h), /\bWindows\b/, `"## ${h}" must not name the codebase the mission is sized against`);
+  }
+  // The headline sentence about the largest run is computed from every command in the file.
+  const sizes = [...readme.matchAll(/--agents (\d+)/g)].map((m) => Number(m[1]));
+  assert.ok(sizes.length >= 5);
+  const largest = Math.max(...sizes);
+  assert.ok(readme.includes(`The largest \`--agents\` value in any command in this file is ${largest}.`), `README must state the largest --agents it uses: ${largest}`);
+  // And that number is reached only by commands that are a projection, a mock, or the never-run real command.
+  for (const line of readme.split('\n').filter((l) => l.includes(`--agents ${largest}`))) {
+    assert.ok(/--dry-run|--mock|ANTHROPIC_API_KEY=\.\.\.|cost-model\.mjs/.test(line), `a command at --agents ${largest} that is neither projection, mock nor the credentialed example: ${line}`);
+  }
 });
 
 /* ---- concurrency: the condition the headline result depends on ------------------------- */
