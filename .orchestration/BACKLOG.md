@@ -361,3 +361,154 @@ T-015/T-017) by a consumer built against a stale description. Three to name this
 Stop. The next entry in this file should be a measurement, not a task: a `--record` from a real
 `partitioned` run at N=100 on Haiku (projected $0.0213, more likely ~$0.006 if the overhead
 estimate holds), then `node src/compare.mjs` on it, then whatever the `overhead.api` line says.
+
+---
+
+## Groomed 2026-10-04, fourth grooming: three real calls, and the plateau they found
+
+The third grooming ended with "the next entry in this file should be a measurement, not a task".
+It is. The owner observed that a boilerplate opened in Claude Code already has an authenticated
+session, so a separate `ANTHROPIC_API_KEY` is the wrong shape for this project, and authorised three
+calls there, each `claude -p "Output the number N. Nothing else." --output-format json`, each
+returning the right number, model `claude-opus-5[1m]`, list pricing, standard tier:
+
+| call | input | cache_creation | cache_read | output | cost_usd | duration_ms |
+|---|---|---|---|---|---|---|
+| 1 (cold) | 2 | 44,539 | 0 | 3 | 0.445475 | 3039 |
+| 2 | 2 | 11,679 | 32,862 | 3 | 0.133306 | 3001 |
+| 3 | 2 | 11,683 | 32,862 | 3 | 0.133346 | 2824 |
+
+Total spend $0.71. No further calls are authorised.
+
+### What the calls establish
+
+**All three costs are reproduced from `src/pricing.mjs` to six decimals, at one pair of multipliers.**
+Write 2x, read 0.1x on the opus input rate: `(11679 x 5 x 2 + 32862 x 5 x 0.1 + 2 x 5 + 3 x 25) / 1e6
+= 0.133306`. Write at 1x or 1.25x reproduces none of them. So the cache-write and cache-read
+multipliers are verified against vendor-reported costs, the 2x is consistent with a one-hour cache,
+and the opus rates in `pricing.mjs` have passed their first external check.
+
+**The marginal cost of a dispatched Claude Code agent is $0.133, and it plateaus there.** The
+prefix is about 44,541 tokens on every call, split three ways: 32,862 stable tokens written once and
+read on every later call ($0.016 warm), about 11,680 volatile tokens re-created at the write price on
+every call ($0.117, 88% of the warm cost), and 2 tokens of task. Calls 2 and 3 agree to four
+decimals, so the volatile block is per-invocation, not a cache that had not finished warming. The
+earlier worry that $0.45 might be the marginal cost is answered: $0.445 is the cold start and $0.133
+is every agent after it. The earlier hope that it might be $0.02 is answered too: it is not, because
+of the volatile block.
+
+**The README's claude-code projection is understated by 9x to 30x, and the factors are separate
+errors.** Projected $1.50 for the 100-agent partitioned job at Haiku. Measured constants give $13.64
+if the agents run one after another (1 cold + 99 warm), $19.57 at the harness's default of 20 in
+flight (20 cold + 80 warm, since the first wave starts before any cache entry exists), and $44.55 if
+all 100 start at once. The factors: 3x the tokens (a wrong constant); the session's Opus against the
+table's Haiku (a lost lever: a dispatched Claude Code agent takes no `--model`, so the api/claude-code
+distinction removes the choice that makes the api kind cheap); and cache-write pricing on a block
+that never hits (a term the model does not have). Against the API path for the same job, $0.0213 at
+Haiku, Claude Code dispatch is about 640x the price for identical work; if `OVERHEAD.api` is really
+~45 as the fixtures suggest, the api job is ~$0.006 and the ratio is over 2000x.
+
+**Cost now depends on concurrency.** The README says "Calls, tokens and cost do not change with
+concurrency; only time does". Under caching, how many calls start before the first cache entry
+exists decides how many pay cold, so the sentence is true only without a cache. The concurrency the
+model treats as a pure time parameter is a cost parameter too, and in the direction opposite to
+time: fewer in flight is cheaper and slower.
+
+**Latency.** `LATENCY['claude-code']` is 8 s; the three calls took 3.04, 3.00 and 2.82 s wall-clock
+with ~1.5 to 2.2 s to first token, and the warm calls were not noticeably faster than the cold one.
+That is an upper bound on fixed latency that includes a 44K-token prefill. The assumption was too
+high by about 2.7x while the token assumption was too low by 3x. The model is wrong in both
+directions at once, and correcting both widens the gap between the two kinds rather than narrowing
+it: `OVERHEAD.api = 200` is probably ~4x too high (still unmeasured) and `OVERHEAD['claude-code']`
+is 3x too low (now measured). That strengthens the architectural conclusion that what you mean by
+"agent" dominates everything else.
+
+**The engineering target is the volatile block.** A warm call with a fully stable prefix would cost
+about $0.022; one that simply did not cache the volatile block would cost about $0.075, because a
+cache write that is never read costs twice what plain input costs. Nobody has looked at what the
+block contains or why it differs between invocations; it is a property of the Claude Code harness,
+not of this repository, which had no `CLAUDE.md` during the calls.
+
+### What they do not establish
+
+- Variance. Three calls, one machine, one session, one model, within minutes. Nothing about other
+  days, other sessions, other machines, the five-minute versus one-hour TTL (all calls were inside
+  both), or whether the stable block survives a session restart.
+- The content of the volatile block, or whether a project `CLAUDE.md` lands in the stable block or
+  the volatile one. For a boilerplate whose purpose is to put instructions in front of every agent,
+  that is the question that decides whether its own instructions cost 10 cents or half a cent per
+  agent. It is one three-call sequence with a `CLAUDE.md` present, and it is first in `Measure it`.
+- Anything about generation speed (3 output tokens fit no slope), the api kind, `OVERHEAD.api`, or
+  whether concurrent cold starts all pay the write (assumed yes; not observed).
+- Whether `[1m]` long-context pricing applies above 200K tokens of input. Not exercised at 44K.
+
+### Tasks
+
+| id | title | size | depends_on | first owned path |
+|---|---|---|---|---|
+| T-024 | A claude-code transport for the agent harness | M | — | src/agents.mjs |
+| T-025 | Price the cache, and let the cost model say that cost depends on concurrency | M | — | src/pricing.mjs |
+| T-026 | README: the first real calls, what they change, and what they do not establish | M | T-024, T-025 | README.md |
+
+Ranked by what each changes. T-025 moves published numbers (three claude-code constants, derived
+from the fixture by a test rather than typed) and adds the missing term. T-024 is the instrument the
+README says cannot exist. T-026 is the only place the README changes. The third grooming rejected a
+`claude -p` transport because "nothing here can measure the column"; that premise is gone.
+
+### Wave nine
+
+Runnable now, concurrently, in one working tree: **T-024, T-025**. Owned paths, checked
+mechanically over every `status: open` task file: `src/agents.mjs` + `test/agents-claude-code.test.mjs`
++ `test/fixtures/claude-p-47.json` (T-024); `src/pricing.mjs` + `src/cost-model.mjs` + `src/compare.mjs`
++ `test/pricing.test.mjs` + `test/cost-model.test.mjs` + `test/crossover.test.mjs` + `test/compare.test.mjs`
+(T-025); `README.md` + `test/readme.test.mjs` (T-026). **No path appears in two lists.**
+
+**Expected red during wave nine, and whose it is.** All in `test/readme.test.mjs`, all T-026's:
+the flag test (on `--kind`, `--cache`), the cost table, cost prose, both crossover tables and the
+concurrency table (on the changed claude-code constants), and the "what this cannot measure" test.
+Every other file must stay green, and both tasks' acceptance says so. `test/suite-integrity.test.mjs`
+is unaffected: it holds floors, and both tasks add tests.
+
+### Wave ten
+
+**T-026**, alone, after both land.
+
+### The semantic dependencies to watch
+
+- **T-024 writes four new record fields; T-025's `compare.mjs` reads them.** The names are stated
+  identically in both files (`cacheCreationInputTokens`, `cacheReadInputTokens`, summary `kind`,
+  `reportedCostUsd`). Disjoint files; coupled meaning; the T-011/T-012 shape. Both are told to report
+  a divergence rather than adapt.
+- **T-024 saves the fixture; T-025 derives three constants from it by test.** The fixture is the
+  three verbatim JSON documents in call order. If the dispatcher cannot supply them verbatim, T-024
+  does not fabricate them, T-025's test falls back to transcribed constants with a comment, and
+  T-026 says the fixture is missing. A reconstructed fixture labelled as a measurement would be the
+  one thing worse than no fixture.
+- **T-025 exports `priceOf`; T-024 owns the `costOf()` that should eventually call it.** Not this
+  wave. The claude-code ceiling uses the CLI's own `total_cost_usd`, so nothing is mispriced
+  meanwhile.
+
+### Rejected, with reasons
+
+- **Run the N=100 claude-code partitioned job.** No. The constants now predict it to within the
+  cold/warm split ($13.64 to $44.55), the run would spend that to confirm a number three calls
+  already fixed, and no further calls are authorised.
+- **Change `OVERHEAD.api` from 200 to 45.** Unchanged from the third grooming. The calls measured
+  the other kind. It is now the one constant whose measurement would move an api figure, and the api
+  run costs cents.
+- **Add `claude-opus-5[1m]` to `pricing.mjs`.** It is a context-window variant of a priced model,
+  not a model; the three costs priced correctly at the plain opus rates. `compare.mjs` strips the
+  suffix for pricing and warns.
+- **Investigate the volatile block.** It belongs to the Claude Code harness, not this repository.
+  What this repository can measure is whether its own `CLAUDE.md` lands in the stable or the
+  volatile block, and that is the first item under `Measure it`, not a task: it is three calls the
+  owner may or may not authorise.
+- **Model what a stable prefix would save.** The arithmetic is two lines ($0.133 to $0.022) and is
+  stated in T-026's README text. A `--cache stable` policy in the model would project a harness that
+  does not exist.
+
+### After this wave
+
+Stop again. The next entry should be either the `CLAUDE.md` three-call sequence (which block do
+repository instructions land in) or the api run that settles `OVERHEAD.api`. Both are the owner's
+to authorise. Neither is a task.
