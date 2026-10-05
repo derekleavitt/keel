@@ -14,7 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { project, TOPOLOGY_NAMES, KIND_NAMES, SWEEP_WORKS } from '../src/cost-model.mjs';
-import { MODELS, PRICING_CHECKED } from '../src/pricing.mjs';
+import { MODELS, PRICING_CHECKED, warnIfPricingStale } from '../src/pricing.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
@@ -23,7 +23,10 @@ const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'sortlab-readme-'));
 
 function node(args, env = {}) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, args, { cwd: root, env: { ...process.env, ...env }, stdio: ['ignore', 'pipe', 'pipe'] });
+    // An env value of undefined removes the variable from the child's environment.
+    const childEnv = { ...process.env, ...env };
+    for (const k of Object.keys(childEnv)) if (childEnv[k] === undefined) delete childEnv[k];
+    const child = spawn(process.execPath, args, { cwd: root, env: childEnv, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (c) => (stdout += c));
@@ -58,8 +61,8 @@ const costTable = node([src('cost-model.mjs'), '--agents', '100']);
 const crossoverOut = node([src('cost-model.mjs'), '--agents', '100', '--crossover']);
 const strategies = ['naive', 'lockfile', 'append', 'hierarchical'];
 // The runner writes under <its own root>/runs. Run it from a copy of src/ in the scratch
-// directory so these trials never share runs/ with the real test files that run alongside this
-// one (test/hierarchical.test.mjs asserts runs/ holds no group files at that moment).
+// directory so these trials never write into the real runs/, which is shared with
+// test/run-isolation.test.mjs and its own concurrent runs.
 fs.cpSync(src(), path.join(scratch, 'src'), { recursive: true });
 const runs = Object.fromEntries(
   strategies.map((s) => [s, node([path.join(scratch, 'src', 'run.mjs'), '--agents', '12', '--strategy', s, '--trials', '6'])]),
@@ -454,7 +457,12 @@ test('--max-spend: preflight refusal text and exit 3, bad value exit 2, mock run
   assert.equal(r.stdout, '');
   const quoted = readme.match(/^(refused {3}projected cost .*)$/m);
   assert.ok(quoted, 'README refusal line not found');
-  assert.equal(quoted[1], r.stderr.trimEnd());
+  // agents.mjs calls warnIfPricingStale() before anything else, and that writes a line to stderr
+  // once PRICING_CHECKED is more than STALE_AFTER_DAYS old. Comparing all of stderr by equality
+  // would have turned this suite red on 2027-01-03 (91 days after 2026-10-04) with no file
+  // changed. The refusal line is compared on its own; the next test pins the warning's prefix.
+  const stderrLines = r.stderr.trimEnd().split('\n').filter((l) => !l.startsWith('warning: model pricing'));
+  assert.deepEqual(stderrLines, [quoted[1]]);
   assert.equal((await badSpend).code, 2);
   assert.equal((await dryRunBadModel).code, 2);
 
@@ -472,6 +480,19 @@ test('--max-spend: preflight refusal text and exit 3, bad value exit 2, mock run
   ]) assert.ok(flat.includes(phrase), `README lost: ${phrase}`);
   const text = fs.readFileSync(src('agents.mjs'), 'utf8');
   assert.match(text, /overshoot is at most --concurrency calls/);
+});
+
+test('the stderr filter above is sound: a stale pricing date writes a line beginning "warning: model pricing"', () => {
+  const day = 86_400_000;
+  const written = [];
+  const at = (days) => new Date(Date.parse(PRICING_CHECKED) + days * day);
+  assert.equal(warnIfPricingStale(at(91), (s) => written.push(s)), true);
+  assert.equal(written.length, 1);
+  assert.ok(written[0].startsWith('warning: model pricing'), written[0]);
+  assert.ok(written[0].endsWith('\n'));
+  // And the boundary the date arithmetic in the comment depends on: 90 days is still fresh.
+  assert.equal(warnIfPricingStale(at(90), (s) => written.push(s)), false);
+  assert.equal(written.length, 1);
 });
 
 test('exit-code table: 0, 1, 2 and 3 are what the tool returns', async () => {
@@ -548,26 +569,25 @@ test('"what this cannot measure": each limitation is still true of the code', as
   assert.ok(limits.includes('Three further structural assumptions'));
   assert.ok(limits.includes('(50/50)') && limits.includes('the partitioned merge, which is untimed and unpriced'));
 
-  // project() ignores fanout: hierarchical at fanout 3 and at the default give the same tree.
+  // project() honours fanout, and compare.mjs hands it the record's own: the T-020 paragraph is gone.
   const withFanout = project({ agents: 12, topology: 'hierarchical', fanout: 3 });
   const without = project({ agents: 12, topology: 'hierarchical' });
-  assert.equal(withFanout.calls, without.calls, 'project() now honours fanout: update the T-020 paragraph in the README');
-  assert.match(fs.readFileSync(src('cost-model.mjs'), 'utf8'), /hierarchical: \(n, fanout = 10\)/);
-  assert.ok(limits.includes('hardcodes the hierarchical fanout at 10'));
-  assert.ok(limits.includes('tracked as T-020'));
-  assert.ok(fs.existsSync(path.join(root, '.orchestration', 'tasks', 'T-020.md')));
-  assert.match(fs.readFileSync(src('compare.mjs'), 'utf8'), /project\(\) has no fanout parameter/);
+  assert.ok(withFanout.calls > without.calls, 'fanout 3 builds a taller tree than the default, so it makes more calls');
+  assert.match(fs.readFileSync(src('cost-model.mjs'), 'utf8'), /hierarchical: \(n, fanout\) =>/);
+  assert.match(fs.readFileSync(src('compare.mjs'), 'utf8'), /fanout: summary\.fanout/);
+  assert.doesNotMatch(limits, /hardcodes|T-020/, 'the fanout limitation was fixed; the README must not still state it');
 
   // Not streamed: the one-variable fit says it folds prefill into the intercept.
   assert.match(hier.stdout, /latencyMs[^\n]*\n {4}upper-bound: intercept of a one-variable fit: includes input prefill/);
   assert.ok(limits.includes('Calls are not streamed'));
 
-  // The surviving race: both tests exist, one lists runs/, the other writes there.
+  // The race is closed: test/hierarchical.test.mjs runs from a scratch copy of src/ and never
+  // reads the project's runs/, and the README no longer claims a surviving race or a flake rate.
   const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
-  assert.match(read('test/hierarchical.test.mjs'), /readdirSync\(path\.join\(root, 'runs'\)\)/);
+  assert.match(read('test/hierarchical.test.mjs'), /path\.join\(scratch, 'runs'\)/);
+  assert.doesNotMatch(read('test/hierarchical.test.mjs'), /path\.join\(root, 'runs'\)/);
   assert.match(read('test/run-isolation.test.mjs'), /runs\//);
-  assert.ok(limits.includes('`test/hierarchical.test.mjs` lists everything in `runs/`'));
-  assert.ok(limits.includes('`test/run-isolation.test.mjs` writes there'));
+  assert.doesNotMatch(readme.replace(/\s+/g, ' '), /test race|failure in \d+ full|full suite runs/);
 
   // Said at the point of use, not once: the sections that quote agent figures label them.
   assert.ok(limits.includes('There is no credential in this environment, and no real run has ever happened'));
@@ -584,4 +604,157 @@ test('Open section: "Measure it" gives the procedure in order, and the overhead 
   const flat = open.replace(/\s+/g, ' ');
   assert.ok(flat.includes('the model assumes 200 input tokens per call'));
   assert.doesNotMatch(open, /probably wrong somewhere/);
+});
+
+/* ---- wave seven: fanout, the harness's refusals, the pid in --out, the closed residual ----- */
+
+const fanout3 = node([src('cost-model.mjs'), '--agents', '12', '--fanout', '3']);
+const fanoutDefault = node([src('cost-model.mjs'), '--agents', '12']);
+const fanoutOne = node([src('cost-model.mjs'), '--agents', '12', '--fanout', '1']);
+const costInfinity = node([src('cost-model.mjs'), '--agents', '12', '--concurrency', 'Infinity']);
+const costFraction = node([src('cost-model.mjs'), '--agents', '12', '--concurrency', '2.5']);
+const noKey = { ANTHROPIC_API_KEY: undefined };
+const refuse = (...args) => node([src('agents.mjs'), ...args], noKey);
+const hierDry = refuse('--agents', '12', '--topology', 'hierarchical', '--fanout', '3', '--dry-run');
+const zeroAgents = refuse('--agents', '0');
+const concurrencyText = refuse('--agents', '5', '--concurrency', 'abc');
+const concurrencyInfinity = refuse('--agents', '5', '--concurrency', 'Infinity');
+const concurrencyFraction = refuse('--agents', '5', '--concurrency', '2.5');
+const unpriced = refuse('--agents', '5', '--model', 'claude-sonnet-4-5');
+// No --out: the harness names its file with its own pid, under <its root>/runs (the scratch copy).
+const defaultOut = node([path.join(scratch, 'src', 'agents.mjs'), '--agents', '3', '--mock', 'clean']);
+
+function hierarchicalRow(stdout) {
+  const m = stdout.match(/^api\s+hierarchical\s+(\d+)\s+(\d+)\s+(\d+)\s+\$/m);
+  assert.ok(m, 'no api hierarchical row');
+  return { calls: Number(m[1]), input: Number(m[2]) };
+}
+
+test('--fanout on the cost model: documented flag, 19 calls at 3 against 15 at the default, 1 refused', async () => {
+  const f3 = await fanout3;
+  const fd = await fanoutDefault;
+  assert.equal(f3.code, 0);
+  const a = hierarchicalRow(f3.stdout);
+  const b = hierarchicalRow(fd.stdout);
+  assert.equal(a.calls, project({ agents: 12, topology: 'hierarchical', fanout: 3 }).calls);
+  assert.equal(b.calls, project({ agents: 12, topology: 'hierarchical' }).calls);
+  assert.notEqual(a.calls, b.calls);
+  const flat = readme.replace(/\s+/g, ' ');
+  assert.ok(flat.includes(`the default gives ${b.calls} \`hierarchical\` calls and ${b.input} input tokens as API calls, and \`--fanout 3\` gives ${a.calls} calls and ${a.input}`));
+  assert.ok(readme.includes('node src/cost-model.mjs --agents 12 --fanout 3'));
+  assert.ok(flat.includes('`--fanout N` (hierarchical only: the group size of the merge tree; an integer >= 2, default 10'));
+  assert.ok(flat.includes('and 1 is refused because a fanout of 1 never reduces'));
+  const one = await fanoutOne;
+  assert.equal(one.code, 2);
+  assert.match(one.stderr, /--fanout/);
+  assert.equal(one.stdout, '');
+  assert.throws(() => project({ agents: 12, topology: 'hierarchical', fanout: 1 }), /fanout/);
+});
+
+test('--concurrency has different valid values in the cost model and the harness, as the README says', async () => {
+  // Cost model: any positive number, Infinity only by leaving the flag out (and through project()).
+  const inf = await costInfinity;
+  assert.equal(inf.code, 2);
+  assert.match(inf.stderr, /--concurrency/);
+  assert.equal((await costFraction).code, 0);
+  assert.equal(typeof project({ agents: 12, concurrency: Infinity }).seconds, 'number');
+  // Harness: an integer >= 1; Infinity, text and fractions are refused with the flag named.
+  for (const r of [await concurrencyInfinity, await concurrencyText, await concurrencyFraction]) {
+    assert.equal(r.code, 2, r.stdout + r.stderr);
+    assert.match(r.stderr, /--concurrency must be an integer >= 1/);
+    assert.equal(r.stdout, '');
+  }
+  const flat = readme.replace(/\s+/g, ' ');
+  for (const phrase of [
+    'the literal `Infinity` is refused with exit 2 (the library function `project()` does accept `Infinity`, which is its default)',
+    'On the agent harness it is an integer >= 1 with a default of 20, and `Infinity`, `0`, a fraction or text exit 2',
+    '`--agents` and `--concurrency` must be integers >= 1',
+  ]) assert.ok(flat.includes(phrase), `README lost: ${phrase}`);
+});
+
+test('harness refusals: --agents 0, an unpriced model, and bad concurrency exit 2 with the flag named and no call', async () => {
+  const z = await zeroAgents;
+  assert.equal(z.code, 2);
+  assert.match(z.stderr, /--agents must be an integer >= 1/);
+  const u = await unpriced;
+  assert.equal(u.code, 2);
+  assert.match(u.stderr, /not in src\/pricing\.mjs/);
+  assert.doesNotMatch(u.stderr, /ANTHROPIC_API_KEY|credential/i, 'the price refusal must come before the credential check');
+  for (const r of [z, u]) {
+    assert.equal(r.stdout, '', 'a refused run prints no report');
+    assert.doesNotMatch(r.stdout + r.stderr, /\$0\.0000/);
+  }
+  assert.equal(MODELS.haiku.id, 'claude-haiku-4-5');
+  assert.ok(!Object.values(MODELS).some((m) => m.id === 'claude-sonnet-4-5'), 'the unpriced id used above became priced; pick another');
+  const flat = readme.replace(/\s+/g, ' ');
+  for (const phrase of [
+    'or a raw model id that appears in `src/pricing.mjs`',
+    'A bad value exits 2 with the flag named, before any call',
+    'A model with no price in `src/pricing.mjs` also exits 2 before the credential check',
+  ]) assert.ok(flat.includes(phrase), `README lost: ${phrase}`);
+});
+
+test('--dry-run at --fanout 3 projects the same 19 calls as the cost model, and the first line names the fanout', async () => {
+  const d = await hierDry;
+  assert.equal(d.code, 0, d.stderr);
+  const lines = d.stdout.split('\n');
+  assert.match(lines[0], /^dry run   hierarchical   claude-haiku-4-5   12 agents   fanout 3   kind api$/);
+  const calls = Number(lines[1].match(/calls (\d+)/)[1]);
+  assert.equal(calls, hierarchicalRow((await fanout3).stdout).calls);
+  assert.equal(calls, project({ agents: 12, topology: 'hierarchical', fanout: 3 }).calls);
+  const flat = readme.replace(/\s+/g, ' ');
+  assert.ok(flat.includes(`\`--agents 12 --topology hierarchical --fanout 3 --dry-run\` prints \`calls ${calls}\``));
+});
+
+test('default --out carries the pid, in the source, in the README, and in the file a run leaves', async () => {
+  assert.match(fs.readFileSync(src('agents.mjs'), 'utf8'), /`agents-\$\{topology\}-\$\{agents\}-\$\{process\.pid\}\.txt`/);
+  assert.ok(readme.includes('`runs/agents-<topology>-<agents>-<pid>.txt`'));
+  assert.ok(!readme.includes('<agents>.txt'), 'the old pid-less default path is still in the README');
+  const r = await defaultOut;
+  assert.equal(r.code, 0, r.stdout + r.stderr);
+  const left = fs.readdirSync(path.join(scratch, 'runs')).filter((f) => /^agents-partitioned-3-\d+\.txt$/.test(f));
+  assert.equal(left.length, 1, `expected one pid-named output file, found ${left}`);
+});
+
+test('compare.mjs projects the tree that ran, and the hierarchical fixture\'s token gap closes exactly', async () => {
+  const hier = (await compareHierarchical).stdout;
+  const n = (re) => Number(hier.match(re)[1]);
+  const projected = n(/^tokens in\s+projected (\d+)/m);
+  const measured = n(/^tokens in\s+projected \d+\s+measured (\d+)/m);
+  const overhead = n(/^overhead\.api\s+assumed \d+\s+measured (\d+)/m);
+  const perNumber = n(/^tokensPerNumber\.list\s+assumed [\d.]+\s+measured ([\d.]+)/m);
+  const calls = n(/(\d+) calls\n/);
+
+  // The projection is the cost model's, at the record's own fanout (3) and not the default.
+  const tree = project({ agents: 12, topology: 'hierarchical', fanout: 3 });
+  assert.equal(projected, tree.input);
+  assert.notEqual(projected, project({ agents: 12, topology: 'hierarchical' }).input);
+  assert.equal(calls, tree.calls);
+
+  // 36 is the number of values the merger and root calls read, taken from the fixture itself.
+  const rows = fs.readFileSync(path.join(root, 'test', 'fixtures', 'record-hierarchical.jsonl'), 'utf8')
+    .split('\n').filter((l) => l.startsWith('{')).map((l) => JSON.parse(l)).filter((r) => !r.summary);
+  const values = rows.filter((r) => r.role !== 'leaf').reduce((a, r) => a + r.valuesIn, 0);
+  assert.equal(rows.length, calls);
+  const { ASSUMPTIONS } = await import('../src/cost-model.mjs');
+  assert.equal(calls * ASSUMPTIONS.OVERHEAD.api + values * ASSUMPTIONS.TOKENS_PER_NUMBER, projected);
+  assert.equal(calls * overhead + values * perNumber, measured);
+  assert.equal(ASSUMPTIONS.OVERHEAD.api, 200, 'OVERHEAD.api is deliberately unchanged; see the README');
+
+  const flat = readme.replace(/\s+/g, ' ');
+  assert.ok(flat.includes(`projects ${projected} input tokens against ${measured} measured`));
+  assert.ok(flat.includes(`${projected} = ${calls} x ${ASSUMPTIONS.OVERHEAD.api} + ${values} x ${ASSUMPTIONS.TOKENS_PER_NUMBER} and ${measured} = ${calls} x ${overhead} + ${values} x ${perNumber}`));
+  assert.ok(section('What this cannot measure').replace(/\s+/g, ' ').includes(`(${projected} projected against ${measured} measured, above)`));
+  assert.ok(flat.includes('with nothing about the tree left in it'));
+
+  // A record whose fanout cannot be used gets no projection and a warning, not a guessed tree.
+  const bad = path.join(scratch, 'bad-fanout.jsonl');
+  const original = fs.readFileSync(path.join(root, 'test', 'fixtures', 'record-hierarchical.jsonl'), 'utf8');
+  assert.ok(original.includes('"fanout":3'));
+  fs.writeFileSync(bad, original.replace('"fanout":3', '"fanout":1'));
+  const r = await node([src('compare.mjs'), bad]);
+  assert.equal(r.code, 0, r.stderr);
+  assert.match(r.stdout, /^tokens in\s+projected -\s+measured \d+/m);
+  assert.match(r.stdout, /warning: could not project this run: invalid fanout 1/);
+  assert.ok(flat.includes('If that fanout is missing or unusable (below 2, for instance), the projection columns print a dash and a warning says why, and no tree is guessed'));
 });
