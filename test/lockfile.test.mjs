@@ -40,7 +40,7 @@ function run(args, env = {}) {
 }
 
 test('fail closed: an unparseable lock is not taken within 200ms', async () => {
-  await withEnv({ SORTLAB_STALE_MS: '50', SORTLAB_RETRY_MS: '2' }, async () => {
+  await withEnv({ KEEL_STALE_MS: '50', KEEL_RETRY_MS: '2' }, async () => {
     const lockPath = `${tmpFile()}.lock`;
     fs.writeFileSync(lockPath, 'garbage');
     let got = null;
@@ -55,7 +55,7 @@ test('fail closed: an unparseable lock is not taken within 200ms', async () => {
 });
 
 test('fail closed: an empty lock is not taken either', async () => {
-  await withEnv({ SORTLAB_STALE_MS: '50', SORTLAB_RETRY_MS: '2' }, async () => {
+  await withEnv({ KEEL_STALE_MS: '50', KEEL_RETRY_MS: '2' }, async () => {
     const lockPath = `${tmpFile()}.lock`;
     fs.writeFileSync(lockPath, '');
     let got = null;
@@ -67,8 +67,8 @@ test('fail closed: an empty lock is not taken either', async () => {
   });
 });
 
-test('a lock older than SORTLAB_STALE_MS is taken', async () => {
-  await withEnv({ SORTLAB_STALE_MS: '100', SORTLAB_RETRY_MS: '2' }, async () => {
+test('a lock older than KEEL_STALE_MS is taken', async () => {
+  await withEnv({ KEEL_STALE_MS: '100', KEEL_RETRY_MS: '2' }, async () => {
     const lockPath = `${tmpFile()}.lock`;
     fs.writeFileSync(lockPath, `99999:deadbeef:${Date.now() - 1000}`);
     const token = await acquire(lockPath);
@@ -78,8 +78,8 @@ test('a lock older than SORTLAB_STALE_MS is taken', async () => {
   });
 });
 
-test('SORTLAB_STALE_MS is honoured: a fresh lock is not taken', async () => {
-  await withEnv({ SORTLAB_STALE_MS: '60000', SORTLAB_RETRY_MS: '2' }, async () => {
+test('KEEL_STALE_MS is honoured: a fresh lock is not taken', async () => {
+  await withEnv({ KEEL_STALE_MS: '60000', KEEL_RETRY_MS: '2' }, async () => {
     const lockPath = `${tmpFile()}.lock`;
     fs.writeFileSync(lockPath, `1:abc:${Date.now()}`);
     let got = null;
@@ -103,7 +103,7 @@ test('release by a non-owner throws LockLostError and leaves the real holder\'s 
 });
 
 test('a holder whose lock was stolen writes nothing and does not delete the thief\'s lock', async () => {
-  await withEnv({ SORTLAB_STALE_MS: '80', SORTLAB_RETRY_MS: '2' }, async () => {
+  await withEnv({ KEEL_STALE_MS: '80', KEEL_RETRY_MS: '2' }, async () => {
     const file = tmpFile();
     const lockPath = `${file}.lock`;
     fs.writeFileSync(file, '10');
@@ -126,7 +126,7 @@ test('a holder whose lock was stolen writes nothing and does not delete the thie
 });
 
 test('contribute retries after a pre-write loss and the value lands exactly once', async () => {
-  await withEnv({ SORTLAB_STALE_MS: '80', SORTLAB_RETRY_MS: '2' }, async () => {
+  await withEnv({ KEEL_STALE_MS: '80', KEEL_RETRY_MS: '2' }, async () => {
     const file = tmpFile();
     const slow = contribute({ file, value: 1, delay: 0, stallAfterAcquire: 300 });
     await sleep(20);
@@ -148,11 +148,11 @@ test('30 concurrent in-process contributors all land', async () => {
 // Started together at import time (they use separate trial files) to keep the file under ~20s.
 const slowRun = run(
   ['--agents', '8', '--strategy', 'lockfile', '--slow', '1', '--slow-ms', '1500', '--trials', '5'],
-  { SORTLAB_STALE_MS: '500' },
+  { KEEL_STALE_MS: '500' },
 );
 const twentyRun = run(['--agents', '20', '--strategy', 'lockfile', '--trials', '10']);
 
-test('harness: slow holder with SORTLAB_STALE_MS=500 passes 5/5 (--slow 1 --slow-ms 1500)', async () => {
+test('harness: slow holder with KEEL_STALE_MS=500 passes 5/5 (--slow 1 --slow-ms 1500)', async () => {
   const { code, out } = await slowRun;
   assert.equal(code, 0, out);
   assert.match(out, /passed:\s+5\/5/);

@@ -1,5 +1,5 @@
 {
-  "name": "sortlab",
+  "name": "keel",
   "private": true,
   "type": "module",
   "engines": { "node": ">=22" },

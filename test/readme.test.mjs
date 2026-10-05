@@ -19,7 +19,7 @@ import { MODELS, PRICING_CHECKED, warnIfPricingStale } from '../src/pricing.mjs'
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
 const src = (...p) => path.join(root, 'src', ...p);
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'sortlab-readme-'));
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'keel-readme-'));
 
 function node(args, env = {}) {
   return new Promise((resolve) => {
@@ -215,7 +215,7 @@ test('hierarchical level block is verbatim what agents.mjs prints (fanout 3, 12 
 
 /* ---- flags and env vars: both directions ---------------------------------------------- */
 
-test('every flag and SORTLAB_ variable read by the source is documented, and every documented one exists', () => {
+test('every flag and KEEL_ variable read by the source is documented, and every documented one exists', () => {
   const files = ['run.mjs', 'worker.mjs', 'agents.mjs', 'cost-model.mjs'];
   const flags = new Set();
   for (const f of files) {
@@ -235,9 +235,9 @@ test('every flag and SORTLAB_ variable read by the source is documented, and eve
 
   const env = new Set();
   for (const f of fs.readdirSync(src(), { recursive: true })) {
-    if (f.endsWith('.mjs')) for (const m of fs.readFileSync(src(f), 'utf8').matchAll(/\bSORTLAB_[A-Z_]+/g)) env.add(m[0]);
+    if (f.endsWith('.mjs')) for (const m of fs.readFileSync(src(f), 'utf8').matchAll(/\bKEEL_[A-Z_]+/g)) env.add(m[0]);
   }
-  for (const v of ['SORTLAB_STALE_MS', 'SORTLAB_RETRY_MS', 'SORTLAB_FANOUT']) assert.ok(env.has(v), `extraction missed ${v}`);
+  for (const v of ['KEEL_STALE_MS', 'KEEL_RETRY_MS', 'KEEL_FANOUT']) assert.ok(env.has(v), `extraction missed ${v}`);
   for (const v of env) assert.ok(readme.includes(v), `${v} is read by the source but not mentioned in README.md`);
 
   // The other direction: a flag in the README's flag table must still be read somewhere.
@@ -329,11 +329,18 @@ const MEASURED_SECTIONS = ['What it costs', 'Where distribution wins on time', '
 
 test('the mission and architecture sections come first and say they are not built', () => {
   const at = (h) => readme.indexOf(`\n## ${h}\n`);
-  for (const h of ['The mission', 'What a system like that needs', 'Why the first instrument sorts a list', 'What is built and what is not']) {
+  const intent = ['The mission', 'The open problem', 'What a system like that needs', 'Why the first instrument sorts a list', 'What is built and what is not'];
+  for (const [i, h] of intent.entries()) {
     assert.notEqual(at(h), -1, `README has no "## ${h}" section`);
     assert.ok(at(h) < at('What it costs'), `"## ${h}" must come before the measured sections`);
+    if (i > 0) assert.ok(at(intent[i - 1]) < at(h), `"## ${h}" must follow "## ${intent[i - 1]}"`);
   }
   assert.ok(section('The mission').includes('This repository does not do that.'));
+  // The open problem names the oracle gap as unsolved and points at the two tools a first contribution runs.
+  const problem = section('The open problem');
+  assert.ok(problem.includes('Nobody has one.'), 'the open problem must say the semantic oracle does not exist');
+  assert.ok(problem.indexOf('--record') !== -1 && problem.indexOf('compare.mjs') > problem.indexOf('--record'), 'the first step names --record then compare.mjs');
+  assert.doesNotMatch(problem, /\bjoin\b|journey|revolution/i, 'a problem statement, not a rallying cry');
   assert.ok(section('What a system like that needs').startsWith('## What a system like that needs\n\nNone of this is built.'));
   // The architecture cites this file's size as a prototype; that number is counted, not written.
   const checks = fs.readFileSync(fileURLToPath(import.meta.url), 'utf8').match(/^test\(/gm).length;
@@ -341,7 +348,7 @@ test('the mission and architecture sections come first and say they are not buil
   // The status table is the boundary, and the limits section says so.
   assert.ok(section('What this cannot measure').includes('Nothing above the `What is built and what is not` table is measured by anything'));
   // No dollar figure or token count appears in the sections that are intent: those belong below the table.
-  for (const h of ['The mission', 'What a system like that needs', 'Why the first instrument sorts a list']) {
+  for (const h of ['The mission', 'The open problem', 'What a system like that needs', 'Why the first instrument sorts a list']) {
     assert.doesNotMatch(section(h), /\$\d/, `"## ${h}" must not quote a dollar figure`);
     assert.doesNotMatch(section(h), /^\|/m, `"## ${h}" must not contain a table`);
   }

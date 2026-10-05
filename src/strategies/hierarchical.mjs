@@ -23,7 +23,7 @@ import path from 'node:path';
 export const name = 'hierarchical';
 
 function fanout() {
-  const n = Number(process.env.SORTLAB_FANOUT ?? 10);
+  const n = Number(process.env.KEEL_FANOUT ?? 10);
   return Number.isInteger(n) && n > 0 ? n : 10;
 }
 

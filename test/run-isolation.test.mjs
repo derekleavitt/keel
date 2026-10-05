@@ -68,7 +68,7 @@ test('hierarchical group files inherit isolation: a foreign stale group file is 
   for (const f of stale) fs.writeFileSync(f, ',777');
   try {
     const args = ['--agents', '12', '--strategy', 'hierarchical', '--trials', '3'];
-    const [a, b] = await Promise.all([run(args, { SORTLAB_FANOUT: '4' }), run(args, { SORTLAB_FANOUT: '4' })]);
+    const [a, b] = await Promise.all([run(args, { KEEL_FANOUT: '4' }), run(args, { KEEL_FANOUT: '4' })]);
     assert.equal(a.code, 0, a.stdout + a.stderr);
     assert.equal(b.code, 0, b.stdout + b.stderr);
     for (const f of stale) assert.equal(fs.readFileSync(f, 'utf8'), ',777', 'foreign file untouched');
@@ -79,14 +79,14 @@ test('hierarchical group files inherit isolation: a foreign stale group file is 
 
 test('trial index prefixes do not capture each other (trial-P-1 vs trial-P-10)', async () => {
   // 11 trials: trial 1's cleanup/compact globs must not touch trial 10's group files.
-  const r = await run(['--agents', '6', '--strategy', 'hierarchical', '--trials', '11'], { SORTLAB_FANOUT: '2' });
+  const r = await run(['--agents', '6', '--strategy', 'hierarchical', '--trials', '11'], { KEEL_FANOUT: '2' });
   assert.equal(r.code, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /^passed:\s+11\/11/m);
 });
 
 test('a passing run leaves nothing behind in runs/', async () => {
   const before = new Set(fs.existsSync(runs) ? fs.readdirSync(runs) : []);
-  const r = await run(['--agents', '6', '--strategy', 'hierarchical', '--trials', '2'], { SORTLAB_FANOUT: '2' });
+  const r = await run(['--agents', '6', '--strategy', 'hierarchical', '--trials', '2'], { KEEL_FANOUT: '2' });
   assert.equal(r.code, 0, r.stdout + r.stderr);
   const own = fs.readdirSync(runs).filter((n) => n.startsWith(`trial-${r.pid}-`));
   assert.deepEqual(own, []);

@@ -11,7 +11,7 @@ import { verify } from '../src/verify.mjs';
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 // The runner writes under <its own root>/runs. Run it from a scratch copy of src/ so this test
 // asserts on its own trials only, never on the real runs/ that other tests write to concurrently.
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'sortlab-hier-'));
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'keel-hier-'));
 fs.cpSync(path.join(root, 'src'), path.join(scratch, 'src'), { recursive: true });
 test.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
 
@@ -31,14 +31,14 @@ test('values land in group files by ceil(value / fanout)', async () => {
   assert.equal(fs.readFileSync(`${file}.g1`, 'utf8'), ',3');
 });
 
-test('SORTLAB_FANOUT changes the grouping', () => {
+test('KEEL_FANOUT changes the grouping', () => {
   const file = tmp();
-  process.env.SORTLAB_FANOUT = '4';
+  process.env.KEEL_FANOUT = '4';
   try {
     assert.equal(groupFile(file, 4), `${file}.g1`);
     assert.equal(groupFile(file, 5), `${file}.g2`);
   } finally {
-    delete process.env.SORTLAB_FANOUT;
+    delete process.env.KEEL_FANOUT;
   }
 });
 

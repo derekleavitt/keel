@@ -21,6 +21,65 @@ what avoiding it costs at N agents, and a working method for keeping a document 
 code that agents change. The architecture section says what the rest would have to be. The
 sections from `What it costs` onward describe only what exists.
 
+## The open problem
+
+Maintain context and coherence while dispatching an effectively unbounded number of agents
+against one codebase. The field has not solved this. Single agents are now good enough that the
+limit is no longer what one can do but what many can do without undoing one another, and there
+is no accepted way to decide, mechanically, whether what a large number of them produced is
+coherent.
+
+This repository's contribution is one move: choose a task on which success is decidable without
+judgement. Sorted, complete, no duplicates, nothing invented. Four properties, each true or
+false, so every way of coordinating N writers can be scored by a program, and the lost update,
+which at large N reads as agents "getting lost", has a name and a detector. On that task the
+answers are below, measured for processes and projected for agents.
+
+What would count as a solution:
+
+- An oracle for a semantic change to a large codebase with the property the four-property
+  oracle has here: a program decides, no reviewer's judgement is in the loop, and a change that
+  passes cannot have silently undone another agent's work. Nobody has one. The layered partial
+  oracles in the next section (type-check, regression tests, acceptance tests, contract check,
+  derived-document check) are what exists, and none of them decides coherence. Showing that some
+  composition of them suffices for a stated class of changes would count. So would a proof that
+  no decidable oracle exists for that class, together with what a dispatcher should do instead.
+- A demonstration, at a scale where the failures occur (hundreds of concurrent tasks against one
+  tree; the two stale-contract failures here happened at six), that a dispatcher holds the
+  lost-update rate and the stale-contract rate at zero by construction, with the check that
+  establishes it published alongside, the way `test/readme.test.mjs` is published alongside this
+  file.
+- A cost accounting that survives contact with a real run: the result here, that distribution
+  never costs less than one agent and only buys time, either generalised with measured constants
+  or shown to fail at a named point.
+
+The sub-problems, each with its origin here and its detail in the next section:
+
+- Ownership. File-disjoint ownership is necessary, and across eight waves here it prevented every
+  collision. Twice it did not prevent a wrong result: two tasks owned disjoint files while one
+  consumed a format the other defined, and nothing errored. The owned unit has to be the
+  interface, and no dispatcher enforces that mechanically.
+- The graph. Whether a system's knowledge of itself is derived or authored, and what makes a
+  derived graph trustworthy. The working answer here is a test that derives this file's claims
+  from tool output and fails on drift. The open question is what that is over a tree with a
+  million files and no human reading the output.
+- Cost. Distribution is a latency tool and never a cost saving at any of 20 work sizes, and the
+  topology that wins at unlimited concurrency loses at 20 calls in flight. What that implies for
+  the shape of a large dispatcher is argued in the next section and measured nowhere.
+- The merge. `partitioned` wins here because code merges integers for free. In a codebase the
+  merge is the work, and no one has priced it.
+
+Where to start, in order of how much each step settles:
+
+1. The first real run. Every agent-side figure here is a projection. With a credential, the
+   `--record` command under `Running real agents` costs a few cents and `node src/compare.mjs`
+   on its output decides `OVERHEAD.api`, the constant every API dollar figure in this file
+   depends on, in one line.
+2. A second instrument, for the failure the sorting task cannot express: two tasks with disjoint
+   files and one shared contract, and a check that fails when the contract changes under its
+   consumer.
+3. The oracle question above, as an argument, a construction, or an impossibility result.
+
 ## What a system like that needs
 
 None of this is built. It is the design the owner's mission requires, reasoned from what this
@@ -409,7 +468,7 @@ and leaves, which is safe because a small `O_APPEND` write is atomic. The file i
 during the run and a compaction pass sorts it at the end, so the contention did not vanish; it
 moved into a coordinator that has to know when the run is over.
 
-`hierarchical` is `append` with one file per group of ten values (`SORTLAB_FANOUT` changes
+`hierarchical` is `append` with one file per group of ten values (`KEEL_FANOUT` changes
 the group size), sorted per group and then merged. Nothing is shared across groups, so nothing
 serialises, and like `append` it needs a coordinator to compact when the workers are done.
 
@@ -448,7 +507,7 @@ The lock now records `<pid>:<token>:<timestamp>`, and a holder acts only on a lo
 own token. It re-checks before publishing (the data file goes to a temp name and is renamed in
 after the check) and releases only a lock that is still its own. A loss before the write is
 retried, because nothing happened; a loss after the write is fatal, because redoing it would
-duplicate the value. `SORTLAB_STALE_MS` and `SORTLAB_RETRY_MS` override the timings so theft
+duplicate the value. `KEEL_STALE_MS` and `KEEL_RETRY_MS` override the timings so theft
 can be provoked in milliseconds, and `--slow` below drives it from the runner.
 
 What stays broken: POSIX has no compare-and-unlink. The ownership check and the write or

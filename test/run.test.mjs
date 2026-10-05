@@ -11,7 +11,7 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 // This file runs failing trials deliberately, so it runs the harness from a copy of src/ in a
 // scratch directory: its trials land in <scratch>/runs, never in the real runs/ (which
 // test/hierarchical.test.mjs scans for group files while other tests are running).
-const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'sortlab-run-'));
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'keel-run-'));
 fs.cpSync(path.join(root, 'src'), path.join(scratch, 'src'), { recursive: true });
 test.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
 

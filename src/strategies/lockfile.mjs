@@ -63,7 +63,7 @@
  *     and redo the work, up to `attempts`), and a loss *after* the write as fatal, because
  *     redoing would duplicate the value. The worker then exits non-zero.
  *
- * `SORTLAB_STALE_MS` and `SORTLAB_RETRY_MS` override the timings so theft can be provoked in
+ * `KEEL_STALE_MS` and `KEEL_RETRY_MS` override the timings so theft can be provoked in
  * milliseconds. They are read at call time.
  *
  * ## Test hook
@@ -100,8 +100,8 @@ function envMs(key, fallback) {
     ? n
     : fallback;
 }
-export const staleMs = () => envMs('SORTLAB_STALE_MS', 10_000);
-export const retryMs = () => envMs('SORTLAB_RETRY_MS', 5);
+export const staleMs = () => envMs('KEEL_STALE_MS', 10_000);
+export const retryMs = () => envMs('KEEL_RETRY_MS', 5);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
