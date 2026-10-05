@@ -1,3 +1,7 @@
 node_modules/
 runs/
 *.log
+
+# Local credentials - never commit
+.env
+.env.*
