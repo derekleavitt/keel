@@ -112,3 +112,13 @@ test('--crossover --concurrency 20 header mentions it; default header does not',
   assert.match(c.stdout, /concurrency 20/);
   assert.doesNotMatch(run().stdout, /concurrency/);
 });
+
+test('crossover takes fanout; --crossover --fanout N works and default is unchanged', () => {
+  const key = (rows) => JSON.stringify(rows);
+  assert.equal(key(crossover({ agents: 100 })), key(crossover({ agents: 100, fanout: 10 })));
+  const h = (f) => crossover({ agents: 100, fanout: f }).find((c) => c.topology === 'hierarchical');
+  assert.notEqual(h(3).timeAtZero, h(10).timeAtZero);
+  const r = spawnSync(process.execPath, [CLI, '--agents', '12', '--crossover', '--fanout', '3'], { encoding: 'utf8' });
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /fanout 3/);
+});

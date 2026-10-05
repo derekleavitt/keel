@@ -49,9 +49,27 @@ test('hierarchical fixture: the law is recovered, and the fit method is stated',
   assert.equal(r.totals.output, 96);
 });
 
-test('hierarchical totals warn that project() cannot take the run\'s fanout', () => {
+test('hierarchical totals project the tree that ran: no fanout warning, 3890 input', () => {
   const r = compare(load('hierarchical').records);
-  assert.ok(r.warnings.some((w) => /fanout/.test(w)));
+  assert.ok(!r.warnings.some((w) => /fanout/.test(w)), r.warnings.join('|'));
+  // 19 calls of api overhead, plus 36 non-leaf covered values (see test/cost-model.test.mjs).
+  assert.equal(r.projected.input, 19 * ASSUMPTIONS.OVERHEAD.api + 36 * ASSUMPTIONS.TOKENS_PER_NUMBER);
+  assert.equal(r.projected.input, 3890);
+});
+
+test('a hierarchical record with an unusable fanout warns instead of projecting a guess', () => {
+  const recs = load('hierarchical').records.map((x) => (x.summary ? { ...x, fanout: 1 } : x));
+  const r = compare(recs);
+  assert.equal(r.projected.input, null);
+  assert.ok(r.warnings.some((w) => /could not project.*fanout/.test(w)));
+});
+
+test('no note repeats its own status prefix', () => {
+  for (const n of ['partitioned', 'hierarchical']) {
+    for (const a of compare(load(n).records).assumptions) {
+      assert.doesNotMatch(a.note, /^not[- ]identifiable/i, `${n} ${a.name}`);
+    }
+  }
 });
 
 test('partitioned fixture: slope is not identifiable and latency is only a bound', () => {

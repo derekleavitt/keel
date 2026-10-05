@@ -154,3 +154,66 @@ test('CLI --concurrency 20 prints 7.6s for api partitioned; bad values exit 2 na
     assert.match(r.stderr, /--concurrency/);
   }
 });
+
+test('fanout defaults to 10: omitting it and passing 10 are identical', () => {
+  const a = project({ agents: 100, topology: 'hierarchical' });
+  const b = project({ agents: 100, topology: 'hierarchical', fanout: 10 });
+  assert.deepEqual(a, b);
+  assert.equal(a.calls, 111);
+});
+
+test('hierarchical call count follows fanout: 12 agents at fanout 3 is 19 (12, 4, 2, 1)', () => {
+  const r = project({ agents: 12, topology: 'hierarchical', fanout: 3 });
+  assert.equal(r.calls, 19);
+  assert.equal(r.rounds, 4);
+});
+
+test('fanout does not change non-hierarchical topologies', () => {
+  for (const topology of ['solo', 'partitioned', 'shared-lock']) {
+    assert.deepEqual(project({ agents: 12, topology, fanout: 3 }), project({ agents: 12, topology }));
+  }
+});
+
+test('the tree term is identified exactly: 36 non-leaf values, so the gap is two constants', async () => {
+  const { ASSUMPTIONS } = await import('../src/cost-model.mjs');
+  const fs = await import('node:fs');
+  const lines = fs.readFileSync(new URL('./fixtures/record-hierarchical.jsonl', import.meta.url), 'utf8')
+    .split('\n').filter((l) => l && !l.startsWith('#')).map((l) => JSON.parse(l));
+  const calls = lines.filter((l) => !l.summary);
+  const fixtureNonLeaf = calls.filter((c) => c.role !== 'leaf').reduce((s, c) => s + c.valuesIn, 0);
+  const r = project({ agents: 12, topology: 'hierarchical', fanout: 3 });
+  // Leaves read no covered values in the model (inputPerCall 0), so input = calls*overhead + nonleaf*TPN.
+  const modelNonLeaf = (r.input - r.calls * ASSUMPTIONS.OVERHEAD.api) / ASSUMPTIONS.TOKENS_PER_NUMBER;
+  assert.equal(fixtureNonLeaf, 36); // 3+3+3+3 at L1, 3+9 at L2, 12 at the root
+  assert.equal(modelNonLeaf, fixtureNonLeaf);
+  assert.equal(r.input, 19 * ASSUMPTIONS.OVERHEAD.api + 36 * ASSUMPTIONS.TOKENS_PER_NUMBER);
+  assert.equal(r.input, 3890);
+  /*
+   * The fixture's 927 is 19 * 45 + 36 * 2. Same call count, same 36 values: the shapes agree.
+   * What remains between 3890 and 927 is attributable to exactly two constants, OVERHEAD.api
+   * (200 vs 45) and TOKENS_PER_NUMBER (2.5 vs 2), and to nothing structural. No constant is
+   * tuned here: a hand-authored fixture cannot settle one.
+   */
+  const measured = lines.find((l) => l.summary).inputTokens;
+  assert.equal(measured, 19 * 45 + 36 * 2);
+});
+
+test('invalid fanout throws from project() naming fanout', () => {
+  for (const fanout of [0, 1, -3, 2.5, '3', NaN, null]) {
+    assert.throws(() => project({ agents: 12, topology: 'hierarchical', fanout }), /fanout/, String(fanout));
+  }
+});
+
+test('CLI --fanout: shown in the header only when not default; invalid exits 2 naming --fanout', () => {
+  assert.doesNotMatch(cli('--agents', '12').stdout, /fanout/);
+  assert.doesNotMatch(cli('--agents', '12', '--fanout', '10').stdout, /fanout/);
+  const ok = cli('--agents', '12', '--fanout', '3');
+  assert.equal(ok.status, 0);
+  assert.match(ok.stdout, /fanout: 3/);
+  assert.match(ok.stdout, /hierarchical\s+19 /);
+  for (const bad of ['0', '1', '-2', '2.5', 'abc']) {
+    const r = cli('--agents', '12', '--fanout', bad);
+    assert.equal(r.status, 2, bad);
+    assert.match(r.stderr, /--fanout/, bad);
+  }
+});

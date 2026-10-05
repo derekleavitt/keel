@@ -217,6 +217,13 @@ export async function runAgents({
   if (topology === 'hierarchical' && !(Number.isInteger(fanout) && fanout >= 2)) {
     throw new Error(`--fanout must be an integer >= 2, got ${fanout}`);
   }
+  // A pass with no work is the one answer the oracle must never give, and NaN workers make no calls.
+  if (!(Number.isInteger(agents) && agents >= 1)) {
+    throw new Error(`agents must be an integer >= 1, got ${agents}`);
+  }
+  if (!(Number.isInteger(concurrency) && concurrency >= 1)) {
+    throw new Error(`concurrency must be an integer >= 1, got ${concurrency}`);
+  }
 
   if (maxSpend !== undefined) {
     if (!(typeof maxSpend === 'number' && maxSpend > 0)) throw new Error(`maxSpend must be a positive number, got ${maxSpend}`);
@@ -640,13 +647,22 @@ export async function main(argv, deps = {}) {
   const topology = arg('topology', 'partitioned');
   const concurrency = Number(arg('concurrency', 20));
   const mock = arg('mock', undefined);
-  const file = arg('out', path.join(root, 'runs', `agents-${topology}-${agents}.txt`));
+  // Named with the process id so concurrent runs of the same shape share nothing (cf. run.mjs).
+  const file = arg('out', path.join(root, 'runs', `agents-${topology}-${agents}-${process.pid}.txt`));
 
   const fanout = Number(arg('fanout', 10));
   const record = arg('record', undefined);
 
   if (argv.includes('--record') && (record === undefined || record.startsWith('--'))) {
     console.error('--record needs a file path');
+    return 2;
+  }
+  if (!(Number.isInteger(agents) && agents >= 1)) {
+    console.error(`--agents must be an integer >= 1, got ${JSON.stringify(arg('agents'))}`);
+    return 2;
+  }
+  if (!(Number.isInteger(concurrency) && concurrency >= 1)) {
+    console.error(`--concurrency must be an integer >= 1, got ${JSON.stringify(arg('concurrency'))}`);
     return 2;
   }
   if (!IMPLEMENTED_TOPOLOGIES.includes(topology)) {
@@ -678,7 +694,7 @@ export async function main(argv, deps = {}) {
     }
     let p;
     try {
-      p = project({ agents, model: alias, kind: 'api', topology, concurrency });
+      p = project({ agents, model: alias, kind: 'api', topology, concurrency, fanout });
     } catch (error) {
       console.error(error.message);
       return 2;
@@ -706,6 +722,11 @@ export async function main(argv, deps = {}) {
       );
       return 3;
     }
+  }
+
+  if (mock === undefined && !Object.hasOwn(PRICE, model)) {
+    console.error(`pricing  model ${JSON.stringify(model)} is not in src/pricing.mjs; its cost cannot be measured, so no calls were made`);
+    return 2;
   }
 
   let call;

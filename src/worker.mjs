@@ -9,7 +9,7 @@
  * Flags:
  *   --file <path>        required. The shared file.
  *   --value <n>          required, numeric. The number this worker contributes.
- *   --strategy <name>    naive | lockfile | append (default naive)
+ *   --strategy <name>    naive | lockfile | append | hierarchical (default naive)
  *   --delay <ms>         work time inside the strategy (default 0)
  *   --crash-at <ms>      failure injection: process.exit(3) after this many ms, racing the
  *                        strategy. With the default 25ms delay, --crash-at 10 dies before the

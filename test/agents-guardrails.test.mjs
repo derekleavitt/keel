@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, spawn as spawnAsync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { runAgents, mockTransport, main } from '../src/agents.mjs';
 import { project } from '../src/cost-model.mjs';
@@ -73,7 +73,7 @@ test('--dry-run output equals project() for every topology, via the real CLI, no
   for (const c of cases) {
     const r = spawn(['--agents', '12', '--topology', c.topology, '--dry-run', ...c.extra]);
     assert.equal(r.status, 0, r.stderr);
-    const p = project({ agents: 12, model: 'haiku', kind: 'api', topology: c.topology, concurrency: 20 });
+    const p = project({ agents: 12, model: 'haiku', kind: 'api', topology: c.topology, concurrency: 20, fanout: c.fanout });
     assert.ok(
       r.stdout.includes(`projected  calls ${p.calls}  tokens ${p.input} in / ${p.output} out  cost $${p.cost.toFixed(4)}  time ${p.seconds.toFixed(1)}s  (concurrency 20)`),
       `${c.topology}\n${r.stdout}`,
@@ -186,4 +186,86 @@ test('CLI mid-run stop prints the stopped line and exits 1', async () => {
   assert.equal(r.code, 1);
   assert.ok(t.count >= 1 && t.count < 10, `calls ${t.count}`);
   assert.match(r.stdout, /^stopped {3}spend ceiling \$.* reached after \d+ calls \(\$.* spent\); up to 1 further calls may have been in flight$/m);
+});
+
+/* ---- T-022: refuse bad arguments and unpriced models before spending ---- */
+
+test('bad --agents / --concurrency exit 2 with empty stdout, naming the flag, and make zero calls', async () => {
+  for (const [flag, values] of [['--agents', ['abc', '0', '2.5', '-1']], ['--concurrency', ['abc', '0', 'Infinity', '2.5']]]) {
+    for (const v of values) {
+      const r = spawn(['--mock', 'clean', '--out', out(), flag, v]);
+      assert.equal(r.status, 2, `${flag} ${v}`);
+      assert.equal(r.stdout, '', `${flag} ${v}`);
+      assert.ok(r.stderr.includes(flag), r.stderr);
+      assert.ok(r.stderr.includes(JSON.stringify(v)), r.stderr);
+      const t = counting();
+      const file = out();
+      const c = await cli([flag, v, '--out', file], { transport: t });
+      assert.equal(c.code, 2, `${flag} ${v}`);
+      assert.equal(t.count, 0, `${flag} ${v}: calls were made`);
+      assert.equal(fs.existsSync(file), false);
+    }
+  }
+  const missing = spawn(['--mock', 'clean', '--out', out(), '--agents']);
+  assert.equal(missing.status, 2);
+});
+
+test('runAgents throws on a non-integer or non-positive agents or concurrency, with no calls', async () => {
+  for (const agents of [NaN, 0, 2.5, -1]) {
+    const t = counting();
+    await assert.rejects(runAgents({ topology: 'partitioned', agents, call: t, file: out() }), /agents must be an integer >= 1/);
+    assert.equal(t.count, 0);
+  }
+  for (const concurrency of [NaN, 0, Infinity, 2.5, -1]) {
+    const t = counting();
+    await assert.rejects(runAgents({ topology: 'partitioned', agents: 4, concurrency, call: t, file: out() }), /concurrency must be an integer >= 1/);
+    assert.equal(t.count, 0);
+  }
+});
+
+test('an unpriced model on a real run exits 2 before the credential check, with zero calls', async () => {
+  const bad = spawn(['--agents', '3', '--model', 'claude-sonnet-4-5', '--out', out()]);
+  assert.equal(bad.status, 2);
+  assert.match(bad.stderr, /src\/pricing\.mjs/);
+  assert.doesNotMatch(bad.stderr, /No credentials/);
+  const t = counting(async (p) => ({ text: String(wanted(p)), inputTokens: 3000, outputTokens: 3000 }));
+  const file = out();
+  const r = await cli(['--agents', '3', '--model', 'claude-sonnet-4-5', '--out', file], { transport: t });
+  assert.equal(r.code, 2);
+  assert.equal(t.count, 0);
+  assert.equal(fs.existsSync(file), false);
+  assert.equal(r.stdout, '');
+});
+
+test('priced models still run: alias, full id, and --mock (unaffected by --model)', async () => {
+  for (const model of ['sonnet', MODELS.sonnet.id]) {
+    const t = counting();
+    const r = await cli(['--agents', '3', '--topology', 'partitioned', '--model', model, '--out', out()], { transport: t });
+    assert.equal(r.code, 0, r.stderr);
+    assert.equal(t.count, 3);
+  }
+  const r = spawn(['--agents', '3', '--mock', 'clean', '--model', 'not-a-model', '--out', out()]);
+  assert.equal(r.status, 0, r.stderr);
+  // no credential: an unset key with a priced model reaches the credential message
+  assert.match(spawn(['--agents', '3', '--model', 'haiku']).stderr, /No credentials/);
+});
+
+test('default --out includes the process id; concurrent runs of the same shape write different files', async () => {
+  const runsDir = path.join(path.dirname(script), '..', 'runs');
+  const run = () => new Promise((resolve) => {
+    const e = { ...process.env }; delete e.ANTHROPIC_API_KEY;
+    const child = spawnAsync(process.execPath, [script, '--agents', '4', '--topology', 'shared-lock', '--mock', 'clean'], { env: e });
+    child.on('close', (code) => resolve({ code, pid: child.pid }));
+  });
+  const [a, b] = await Promise.all([run(), run()]);
+  const fa = path.join(runsDir, `agents-shared-lock-4-${a.pid}.txt`);
+  const fb = path.join(runsDir, `agents-shared-lock-4-${b.pid}.txt`);
+  try {
+    assert.equal(a.code, 0); assert.equal(b.code, 0);
+    assert.notEqual(fa, fb);
+    assert.ok(fs.existsSync(fa), fa);
+    assert.ok(fs.existsSync(fb), fb);
+  } finally {
+    fs.rmSync(fa, { force: true }); fs.rmSync(fb, { force: true });
+  }
 });

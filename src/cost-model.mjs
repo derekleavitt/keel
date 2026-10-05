@@ -118,7 +118,7 @@ const TOPOLOGIES = {
    * numbers once, so total tokens are O(N log_fanout N), not O(N). What stays small is the
    * number of children per agent, not the number of tokens.
    */
-  hierarchical: (n, fanout = 10) => {
+  hierarchical: (n, fanout) => {
     const merger = []; // numbers covered by each merger, in call order, after the n leaves
     const roundOutputs = [TOKENS_PER_NUMBER]; // longest call in each round
     const roundCalls = [n]; // calls in each round
@@ -163,6 +163,9 @@ export const ASSUMPTIONS = Object.freeze({
   LATENCY: Object.freeze(LATENCY),
 });
 
+/** The tree width the documented numbers assume; project()'s `fanout` defaults to it. */
+export const DEFAULT_FANOUT = 10;
+
 export const TOPOLOGY_NAMES = Object.keys(TOPOLOGIES);
 export const MODEL_NAMES = Object.keys(MODELS);
 export const KIND_NAMES = Object.keys(OVERHEAD);
@@ -181,7 +184,11 @@ function lookup(table, key, what) {
  * with agents x work; distributed topologies do `work` per agent, concurrently where they can.
  * Merge steps that are agents add no work of their own.
  */
-export function project({ agents, model = 'haiku', kind = 'api', topology = 'partitioned', work = 0, concurrency = Infinity }) {
+export function project({ agents, model = 'haiku', kind = 'api', topology = 'partitioned', work = 0, concurrency = Infinity, fanout = DEFAULT_FANOUT }) {
+  // Fanout 1 never reduces (ceil(n/1) = n forever), so it is invalid, not merely odd.
+  if (typeof fanout !== 'number' || !Number.isInteger(fanout) || fanout < 2) {
+    throw new Error(`invalid fanout ${JSON.stringify(fanout)}; must be an integer >= 2 (fanout 1 never reduces)`);
+  }
   if (typeof concurrency !== 'number' || Number.isNaN(concurrency) || concurrency <= 0) {
     throw new Error(`invalid concurrency ${JSON.stringify(concurrency)}; must be a positive number or Infinity`);
   }
@@ -194,7 +201,7 @@ export function project({ agents, model = 'haiku', kind = 'api', topology = 'par
   const price = lookup(MODELS, model, 'model');
   const overhead = lookup(OVERHEAD, kind, 'kind');
   const latency = LATENCY[kind];
-  const shape = lookup(TOPOLOGIES, topology, 'topology')(agents);
+  const shape = lookup(TOPOLOGIES, topology, 'topology')(agents, fanout);
 
   let rawInput = 0;
   let rawOutput = 0;
@@ -251,8 +258,8 @@ export const SWEEP_WORKS = [0, ...[1, 10, 100, 1000, 10_000, 100_000].flatMap((d
  * grows faster in work than any distributed topology's whenever agents > 1, so the gap only
  * widens and bisection is valid.
  */
-export function crossover({ agents, model = 'haiku', kind = 'api', concurrency = Infinity }) {
-  const secs = (topology, work) => project({ agents, model, kind, topology, work, concurrency }).seconds;
+export function crossover({ agents, model = 'haiku', kind = 'api', concurrency = Infinity, fanout = DEFAULT_FANOUT }) {
+  const secs = (topology, work) => project({ agents, model, kind, topology, work, concurrency, fanout }).seconds;
   return TOPOLOGY_NAMES.filter((t) => t !== 'solo').map((topology) => {
     const wins = (w) => secs(topology, w) < secs('solo', w);
     let at = null;
@@ -277,14 +284,14 @@ const CROSSOVER_NOTES = {
   'shared-lock': 'N serial rounds each add latency; solo pays the same work once. Never catches up.',
 };
 
-function runCrossover(agents, model, concurrency) {
-  const cc = concurrency === Infinity ? '' : `, concurrency ${concurrency}`;
+function runCrossover(agents, model, concurrency, fanout) {
+  const cc = (concurrency === Infinity ? '' : `, concurrency ${concurrency}`) + (fanout === DEFAULT_FANOUT ? '' : `, fanout ${fanout}`);
   console.log(`\nCrossover for ${agents} agents, model ${MODELS[model].id}${cc}   (projection, not measurement)`);
   console.log(`work = input+output tokens of real work per agent; swept 0..${MAX_SWEEP_WORK}\n`);
   let violations = 0;
   for (const kind of KIND_NAMES) {
     console.log(`kind: ${kind}`);
-    for (const c of crossover({ agents, model, kind, concurrency })) {
+    for (const c of crossover({ agents, model, kind, concurrency, fanout })) {
       console.log(
         c.at === null
           ? `  ${c.topology} beats solo on time: never within sweep`
@@ -294,7 +301,7 @@ function runCrossover(agents, model, concurrency) {
     }
     console.log('\n  work/agent  ' + TOPOLOGY_NAMES.map((t) => t.padStart(13)).join(' '));
     for (const work of SWEEP_WORKS) {
-      const rows = TOPOLOGY_NAMES.map((topology) => project({ agents, model, kind, topology, work, concurrency }));
+      const rows = TOPOLOGY_NAMES.map((topology) => project({ agents, model, kind, topology, work, concurrency, fanout }));
       const solo = rows[0];
       for (const r of rows) if (r.cost < solo.cost) violations += 1;
       if ([0, 10, 100, 1000, 10_000, 100_000, MAX_SWEEP_WORK].includes(work)) {
@@ -332,21 +339,29 @@ export function run() {
       throw new Error(`invalid --concurrency ${JSON.stringify(arg('concurrency', undefined))}; must be a positive number`);
     }
   }
+  let fanout = DEFAULT_FANOUT;
+  if (process.argv.includes('--fanout')) {
+    const raw = arg('fanout', '');
+    fanout = raw === '' ? NaN : Number(raw);
+    if (!Number.isInteger(fanout) || fanout < 2) {
+      throw new Error(`invalid --fanout ${JSON.stringify(arg('fanout', undefined))}; must be an integer >= 2 (fanout 1 never reduces)`);
+    }
+  }
   if (process.argv.includes('--crossover')) {
     lookup(MODELS, model, 'model');
-    runCrossover(agents, model, concurrency);
+    runCrossover(agents, model, concurrency, fanout);
     return;
   }
 
   const rows = [];
   for (const kind of KIND_NAMES) {
     for (const topology of TOPOLOGY_NAMES) {
-      rows.push(project({ agents, model, kind, topology, work, concurrency }));
+      rows.push(project({ agents, model, kind, topology, work, concurrency, fanout }));
     }
   }
 
   console.log(`\nProjected cost for ${agents} agents contributing 1..${agents}`);
-  console.log(`model: ${rows[0].model}   (projection, not measurement)${work > 0 ? `   work: ${work} tokens/agent` : ''}${concurrency === Infinity ? '' : `   concurrency: ${concurrency}`}\n`);
+  console.log(`model: ${rows[0].model}   (projection, not measurement)${work > 0 ? `   work: ${work} tokens/agent` : ''}${concurrency === Infinity ? '' : `   concurrency: ${concurrency}`}${fanout === DEFAULT_FANOUT ? '' : `   fanout: ${fanout}`}\n`);
 
   console.log('kind          topology       calls    tokens in   tokens out       cost     ~time');
   console.log('─'.repeat(84));

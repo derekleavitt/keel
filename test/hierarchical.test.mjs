@@ -9,6 +9,12 @@ import { contribute, compact, groupFile, name } from '../src/strategies/hierarch
 import { verify } from '../src/verify.mjs';
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+// The runner writes under <its own root>/runs. Run it from a scratch copy of src/ so this test
+// asserts on its own trials only, never on the real runs/ that other tests write to concurrently.
+const scratch = fs.mkdtempSync(path.join(os.tmpdir(), 'sortlab-hier-'));
+fs.cpSync(path.join(root, 'src'), path.join(scratch, 'src'), { recursive: true });
+test.after(() => fs.rmSync(scratch, { recursive: true, force: true }));
+
 const tmp = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'hier-')), 'trial.txt');
 
 test('exports the strategy name', () => assert.equal(name, 'hierarchical'));
@@ -50,11 +56,10 @@ test('compact of 100 shuffled values passes the oracle, no group file sees more 
 });
 
 test('real processes via the runner leave no group files', () => {
-  const run = spawnSync(process.execPath, ['src/run.mjs', '--agents', '25', '--strategy', 'hierarchical', '--trials', '2'], {
-    cwd: root,
+  const run = spawnSync(process.execPath, [path.join(scratch, 'src/run.mjs'), '--agents', '25', '--strategy', 'hierarchical', '--trials', '2'], {
     encoding: 'utf8',
   });
   assert.equal(run.status, 0, run.stdout + run.stderr);
-  const left = fs.readdirSync(path.join(root, 'runs')).filter((f) => /\.txt\.g\d+$/.test(f));
+  const left = fs.readdirSync(path.join(scratch, 'runs')).filter((f) => /\.txt\.g\d+$/.test(f));
   assert.deepEqual(left, []);
 });

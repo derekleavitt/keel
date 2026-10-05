@@ -128,7 +128,7 @@ function fitTiming(points) {
     out.level = median(points.map((p) => p.ms));
     out.reasons.slope = `degenerate: ${distinct} distinct outputTokens value(s) in ${points.length} calls, need ${MIN_DISTINCT_OUTPUTS}; the slope is not identifiable from this record`;
     out.reasons.latency = `median ms of calls at ${[...new Set(points.map((p) => p.out))].join('/')} output tokens: an upper bound on LATENCY (still contains prefill and generation time that cannot be subtracted without a slope)`;
-    out.reasons.prefill = 'not identifiable: no slope to separate it from';
+    out.reasons.prefill = 'no slope to separate it from';
     return out;
   }
 
@@ -173,7 +173,7 @@ function fitTiming(points) {
   out.latencyMs = fit.beta[0];
   out.msPerOutputToken = fit.beta[1];
   if (fit.twoVar) out.msPerInputToken = fit.beta[2];
-  else out.reasons.prefill = 'not identifiable: inputTokens is constant or collinear with outputTokens in this record, so prefill is part of latencyMs';
+  else out.reasons.prefill = 'inputTokens is constant or collinear with outputTokens in this record, so prefill is part of latencyMs';
   if (!(out.msPerOutputToken > 0)) {
     out.reasons.slope = `fitted slope ${out.msPerOutputToken.toFixed(3)} ms/token is not positive: noise or retries dominate; no rate reported`;
     out.msPerOutputToken = null;
@@ -236,12 +236,12 @@ export function compare(records) {
   const assumptions = [
     A('overhead.api', ASSUMPTIONS.OVERHEAD.api, overhead,
       zeroTokens ? noTokens
-        : leaves.length === 0 ? 'no accepted leaf calls: not identifiable'
+        : leaves.length === 0 ? 'no accepted leaf calls'
           : `median inputTokens of ${leaves.length} leaf calls: system prompt plus the one number shown, so it slightly overstates pure overhead`),
     A('tokensPerNumber.single', ASSUMPTIONS.TOKENS_PER_NUMBER, single,
-      zeroTokens ? noTokens : singles.length === 0 ? 'no accepted leaf calls with a value out: not identifiable' : `median outputTokens/valuesOut of ${singles.length} leaf calls`),
+      zeroTokens ? noTokens : singles.length === 0 ? 'no accepted leaf calls with a value out' : `median outputTokens/valuesOut of ${singles.length} leaf calls`),
     A('tokensPerNumber.list', ASSUMPTIONS.TOKENS_PER_NUMBER, list,
-      zeroTokens ? noTokens : list === null ? 'no merger/root/shared/solo calls with values out (a partitioned run has none): not identifiable' : `outputTokens/valuesOut pooled over ${lists.length} merger/root/shared/solo calls`),
+      zeroTokens ? noTokens : list === null ? 'no merger/root/shared/solo calls with values out (a partitioned run has none)' : `outputTokens/valuesOut pooled over ${lists.length} merger/root/shared/solo calls`),
     A('latencyMs', ASSUMPTIONS.LATENCY.api * 1000, latencyMeasured,
       [fit.reasons.latency, fit.method && `fit: ${fit.method}, ${fit.n} calls`].filter(Boolean).join('; '),
       zeroTokens ? 'not-identifiable' : latencyBound || (fit.latencyMs !== null && !fit.method.includes('two-variable')) ? 'upper-bound' : 'measured'),
@@ -267,13 +267,14 @@ export function compare(records) {
     warnings.push(`model ${JSON.stringify(summary.model)} is not in pricing.mjs; no projection`);
   } else {
     try {
-      const p = project({ agents: summary.agents, topology: summary.topology, model: alias, kind: 'api', concurrency });
+      const p = project({
+        agents: summary.agents, topology: summary.topology, model: alias, kind: 'api', concurrency,
+        // Only hierarchical has a tree shape; the record's own fanout is the tree that ran.
+        ...(summary.topology === 'hierarchical' ? { fanout: summary.fanout } : {}),
+      });
       projected = { input: p.input, output: p.output, cost: p.cost, seconds: p.seconds };
     } catch (error) {
       warnings.push(`could not project this run: ${error.message}`);
-    }
-    if (summary.topology === 'hierarchical' && summary.fanout !== 10) {
-      warnings.push(`project() has no fanout parameter and projects hierarchical at its default fanout 10; this run used fanout ${summary.fanout}, so the projected column is for a different tree and its ratios are not comparable`);
     }
   }
   if (summary.topology === 'partitioned') {
